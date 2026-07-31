@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "projects_dir": "projects",
+  "freshness_days": {
+    "state": 365000,
+    "reference": 365000,
+    "decision": 365000,
+    "runbook": 365000,
+    "incident": 365000,
+    "research": 365000
+  }
+}

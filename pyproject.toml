@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cerebro-agent-context"
+version = "0.1.0"
+description = "Local-first, Git-backed, verified operational context for coding agents."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Bilal Bahjaoui" }]
+keywords = ["ai-agents", "agent-memory", "codex", "claude-code", "context-engineering"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Version Control :: Git",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.17,<2",
+  "ruff>=0.12,<1",
+]
+
+[project.urls]
+Homepage = "https://github.com/Bilal-Bjo/cerebro-agent-context"
+Repository = "https://github.com/Bilal-Bjo/cerebro-agent-context"
+Issues = "https://github.com/Bilal-Bjo/cerebro-agent-context/issues"
+
+[project.scripts]
+cerebro = "cerebro_context.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cerebro_context"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true

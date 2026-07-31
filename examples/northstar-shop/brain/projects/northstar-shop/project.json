@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "northstar-shop",
+  "name": "Northstar Shop",
+  "roots": [
+    "../workspace"
+  ],
+  "sensitivity": "internal",
+  "history_paths": [
+    "history/northstar-shop"
+  ]
+}
