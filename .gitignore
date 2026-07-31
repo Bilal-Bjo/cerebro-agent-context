@@ -12,4 +12,8 @@ __pycache__/
 coverage.xml
 dist/
 build/
-evaluation/results/
+evaluation/results/*
+!evaluation/results/v1/
+!evaluation/results/v1/**
+!evaluation/results/v2/
+!evaluation/results/v2/**

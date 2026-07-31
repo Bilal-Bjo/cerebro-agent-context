@@ -13,15 +13,16 @@ Add the following to `AGENTS.md`:
 Before every task:
 
 1. Update the Cerebro repository with a fast-forward-only Git operation.
-2. Run `cerebro context --cwd "$PWD" --verify-evidence --json`.
-3. Read the returned State and Agent Map before planning or editing.
-4. Inspect `status` and `warnings`. Stale notes are excluded; evidence, validation, access, and
+2. On a clean worktree, run `cerebro task init --cwd "$PWD" --id <task-id> --json`.
+3. Run `cerebro context --cwd "$PWD" --verify-evidence --json`.
+4. Read the returned State and Agent Map before planning or editing.
+5. Inspect `status` and `warnings`. Stale notes are excluded; evidence, validation, access, and
    resolution failures remain blocking.
-5. Source, tests, runtime output, and owning services outrank Cerebro.
-6. Never write credentials, cookies, sessions, private keys, customer data, or transcripts to the
+6. Source, tests, runtime output, and owning services outrank Cerebro.
+7. Never write credentials, cookies, sessions, private keys, customer data, or transcripts to the
    brain.
-7. After nontrivial work, use the `cerebro-reconcile` skill or reconciliation prompt. Remember only
-   compact, proven changes that will affect a future action.
+8. After nontrivial work, use the `cerebro-reconcile` skill or reconciliation prompt. Submit
+   structured proposals; never grant note authority by editing frontmatter directly.
 ```
 
 The exact Git update command belongs to your environment. Do not place a token in the instruction
@@ -96,7 +97,9 @@ Both paths apply the same gate:
 
 - correct an existing note before creating a new one;
 - remember only durable facts that will change a future action;
-- bind important claims to small project files when deterministic evidence helps;
+- bind important claims to small project files only when task provenance proves the agent did not
+  change those files;
+- require exact interactive owner confirmation for durable decisions;
 - validate and inspect the exact diff;
 - do nothing when no claim passes the gate;
 - never push or change remote policy automatically.

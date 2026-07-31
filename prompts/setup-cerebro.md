@@ -8,7 +8,7 @@ The prompt defaults to:
 
 - the current repository as the first Cerebro project;
 - `~/.cerebro` as the private brain;
-- the public `v0.2.0` release of Cerebro;
+- the public `v0.3.0` release of Cerebro;
 - local Git history without creating or pushing a remote.
 
 Change those defaults in the first paragraph before pasting if needed.
@@ -19,7 +19,7 @@ Set up Cerebro for the project currently open in this workspace.
 Use these defaults unless the local environment proves they are unsuitable:
 
 - Cerebro brain: ~/.cerebro
-- Cerebro release: v0.2.0 from
+- Cerebro release: v0.3.0 from
   https://github.com/Bilal-Bjo/cerebro-agent-context
 - First project root: the current Git repository root, or the current working directory when this
   is not a Git repository
@@ -71,12 +71,18 @@ A. Preflight
 
 1. Resolve the absolute project root.
 2. Inspect its Git status without changing it.
-3. Read the smallest authoritative set of project files needed to understand purpose, runtime,
+3. If it is a clean Git worktree, record the setup task base before any edit:
+
+   cerebro task init --cwd <absolute-project-root> --id setup-cerebro --json
+
+   If it is dirty or not a Git repository, do not invent provenance. Initial notes will require
+   explicit owner acceptance.
+4. Read the smallest authoritative set of project files needed to understand purpose, runtime,
    build/test commands, major boundaries, and current operational state. Prefer README files,
    manifests, lockfiles, checked-in configuration, tests, and the installed tool versions.
-4. Check for AGENTS.md and CLAUDE.md before editing either.
-5. Check whether `cerebro` is already installed and record `cerebro --version`.
-6. Inspect the brain path. If `~/.cerebro/cerebro.json` exists, run:
+5. Check for AGENTS.md and CLAUDE.md before editing either.
+6. Check whether `cerebro` is already installed and record `cerebro --version`.
+7. Inspect the brain path. If `~/.cerebro/cerebro.json` exists, run:
 
    cerebro doctor --brain ~/.cerebro --json
    cerebro projects --brain ~/.cerebro --json
@@ -89,11 +95,11 @@ Use the first suitable user-scoped option already supported by the machine:
 
 1. `uv tool install` from the Git tag:
 
-   uv tool install "git+https://github.com/Bilal-Bjo/cerebro-agent-context.git@v0.2.0"
+   uv tool install "git+https://github.com/Bilal-Bjo/cerebro-agent-context.git@v0.3.0"
 
 2. `pipx install` from the Git tag:
 
-   pipx install "git+https://github.com/Bilal-Bjo/cerebro-agent-context.git@v0.2.0"
+   pipx install "git+https://github.com/Bilal-Bjo/cerebro-agent-context.git@v0.3.0"
 
 3. a dedicated virtual environment under the user’s local application-data directory, plus a
    user-local launcher.
@@ -135,15 +141,21 @@ cerebro scaffold <project-id> \
 
 Do not select a similarly named project by guesswork.
 
-E. Replace scaffold prose with verified context
+E. Replace scaffold prose through governed proposals
 
 Edit only the new project partition under:
 
 ~/.cerebro/projects/<project-id>/
 
-Keep the generated frontmatter fields and stable IDs valid.
+Keep the generated stable IDs. Do not grant authority by editing frontmatter directly. Prepare one
+exact proposal JSON per note using the schema in the public reconciliation prompt, check it with
+`cerebro proposal ... check`, then apply it with `cerebro proposal ... apply`.
 
-Write State.md as compact present-tense authority containing:
+Request `source-bound` authority only when task initialization succeeded and every evidence file
+was untouched since that base. Otherwise request `owner-accepted` and stop for the owner's exact-ID
+interactive confirmation.
+
+The State proposal should contain compact present-tense authority covering:
 
 - what the project is and who or what owns its source of truth;
 - its verified runtime or platform;
@@ -152,7 +164,7 @@ Write State.md as compact present-tense authority containing:
 - current constraints or known release gates;
 - exact nonsecret source locators.
 
-Write Agent Map.md as a short routing document containing:
+The Agent Map proposal should contain a short routing document covering:
 
 - “Read State first”;
 - which repository files are authoritative for architecture, setup, commands, and tests;
@@ -164,18 +176,17 @@ Do not fill either note with generic advice, guessed architecture, transient tas
 transcript, or copied secrets. If a material fact cannot be verified, omit it or label the
 verification gate rather than presenting it as current.
 
-For important claims that depend directly on one or more stable repository files, generate a
-bounded check:
+For source-bound notes, put one or more directly supporting project-relative files in the
+proposal's `evidence_paths`, then run:
 
-cerebro evidence hash \
-  --brain ~/.cerebro \
+cerebro proposal --brain ~/.cerebro check \
   --cwd <absolute-project-root> \
-  --path <project-relative-file> \
+  --file <proposal.json> \
   --json
 
-Copy each returned verification object into the owning note's `verification` array. Use at most
-eight small, directly relevant regular files. Do not bind a note to generated files, dependencies,
-logs, databases, secret-bearing configuration, or broad directories.
+Cerebro—not the agent—checks task provenance and creates verification hashes during apply. Use at
+most eight small, directly relevant regular files. Do not bind a note to generated files,
+dependencies, logs, databases, secret-bearing configuration, or broad directories.
 
 F. Add the task-boundary rule
 
@@ -186,17 +197,17 @@ AGENTS.md only when an equivalent rule is not already present:
 
 Before planning or editing:
 
-1. Run `cerebro context --brain ~/.cerebro --cwd "$PWD" --verify-evidence --json`.
-2. Read the returned State and Agent Map.
-3. Inspect status and warnings. Stale notes are excluded; if resolution, validation, evidence, or
+1. On a clean worktree, run `cerebro task init --cwd "$PWD" --id <task-id> --json`.
+2. Run `cerebro context --brain ~/.cerebro --cwd "$PWD" --verify-evidence --json`.
+3. Read the returned State and Agent Map.
+4. Inspect status and warnings. Stale notes are excluded; if resolution, validation, evidence, or
    restricted access fails, report the exact boundary failure instead of guessing.
-4. Current source, tests, runtime output, and owning services outrank Cerebro.
-5. Never store credentials, cookies, sessions, private keys, customer data, or raw transcripts in
+5. Current source, tests, runtime output, and owning services outrank Cerebro.
+6. Never store credentials, cookies, sessions, private keys, customer data, or raw transcripts in
    Cerebro.
-6. After nontrivial work, classify candidates as accept, review, or reject. Automatically write
-   only explicitly accepted decisions or facts independently proven by a source the agent did not
-   change in the task.
-7. Prefer correcting an existing note. Never create task logs, copy source code, or remember
+7. After nontrivial work, use the reconciliation prompt or skill to submit a structured proposal.
+   Never grant authority by editing note frontmatter directly.
+8. Prefer correcting an existing note. Never create task logs, copy source code, or remember
    temporary plans merely because work occurred.
 
 If AGENTS.md does not exist, create it with only this section.

@@ -1,9 +1,11 @@
 ---
-schema_version: 1
+schema_version: 2
 id: checkout-recovery-runbook
 project: northstar-shop
 type: runbook
 status: active
+authority: owner-accepted
+promotion: {"accepted_at":"2026-01-15T00:00:00+00:00","method":"interactive-owner-confirmation"}
 created: 2026-01-15
 updated: 2026-01-15
 last_verified: 2026-01-15

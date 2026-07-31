@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "v1",
+  "packets_dir": "evaluation/packets",
+  "conditions": ["repository", "agents", "cerebro"],
+  "cerebro_require_fresh": true,
+  "packets": {},
+  "differential_packets": [
+    "stale-queue-backend",
+    "irrelevant-stale-note",
+    "semantic-hash-trap",
+    "history-separation"
+  ],
+  "method": {
+    "status": "frozen",
+    "frozen_commit": "a25b3392cc81a48e5b3ee216a9c3bcf3beebcbbd",
+    "note": "This suite preserves the original strict-freshness benchmark."
+  }
+}

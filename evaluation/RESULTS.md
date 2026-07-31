@@ -62,5 +62,17 @@ the result.
 5. Defer live-service adapters until a measured real-work failure requires one.
 6. Run a time-boxed personal workflow soak before making a “game changer” claim.
 
-The raw structured result files are intentionally not committed. They contain no prompts or
-transcripts, but publishing them was not needed to support these aggregate claims.
+The exact structured result records are committed under
+[`evaluation/results/v1/`](results/v1/). Their documented SHA-256 digests and the deterministic
+`summarize` command reproduce this table. The records contain no prompts, transcripts, hidden
+reasoning, credentials, standard output, or standard error.
+
+## Frozen boundary
+
+This document reports suite `v1`, whose Cerebro condition intentionally used strict freshness. It
+must not be rewritten to imply that the later warning-first policy produced these numbers.
+
+Suite `v2` is a separate benchmark. It adds a maintained-current `AGENTS.md` upper-bound
+condition rendered from a neutral maintenance dossier, uses warning-first Cerebro context, and
+asserts that the age-expired State note is omitted and reported without blocking. Its
+[differential results](RESULTS_V2.md) do not replace this frozen result.

@@ -9,7 +9,7 @@ from typing import Any
 
 from cerebro_context.core import Brain, CerebroError
 
-CONDITIONS = ("repository", "agents", "cerebro")
+CONDITIONS = ("repository", "agents", "agents_current", "cerebro")
 CURRENT_STATUSES = {
     "state": "current",
     "reference": "active",
@@ -31,6 +31,13 @@ class Expected:
     forbidden_answers: tuple[str, ...]
     cerebro_status: str
     block_relevant: bool
+    warning_ids: tuple[str, ...] = ()
+    condition_sources: dict[str, tuple[str, ...]] | None = None
+
+    def sources_for(self, condition: str) -> tuple[str, ...]:
+        if self.condition_sources and condition in self.condition_sources:
+            return self.condition_sources[condition]
+        return self.sources
 
 
 @dataclass(frozen=True)
@@ -41,6 +48,7 @@ class Packet:
     answer_options: tuple[str, ...]
     repository_files: dict[str, str]
     agents_context: str
+    agents_current_context: str | None
     cerebro: dict[str, Any]
     expected: Expected
     path: Path
@@ -158,6 +166,7 @@ def load_packet(path: Path) -> Packet:
         answer_options=tuple(answer_options),
         repository_files=repository_files,
         agents_context=raw["agents_context"],
+        agents_current_context=None,
         cerebro=cerebro,
         expected=Expected(
             answer=answer,
@@ -221,7 +230,7 @@ def _render_note(
         raise EvaluationError(f"{packet.packet_id}: last_verified must be a string")
     metadata = (
         "---\n"
-        "schema_version: 1\n"
+        "schema_version: 2\n"
         f"id: {note_id}\n"
         f"project: {packet.packet_id}\n"
         f"type: {note_type}\n"
@@ -237,6 +246,20 @@ def _render_note(
         + _json_line("sources", [f"repo://evaluation/{packet.packet_id}"])
     )
     verification_specs = spec.get("verification", [])
+    authority = "source-bound" if verification_specs else "owner-accepted"
+    if authority == "source-bound":
+        promotion = {
+            "method": "task-provenance",
+            "accepted_at": datetime.now(UTC).isoformat(),
+            "task_id": f"evaluation-{packet.packet_id}",
+            "base_commit": "0" * 40,
+        }
+    else:
+        promotion = {
+            "method": "interactive-owner-confirmation",
+            "accepted_at": datetime.now(UTC).isoformat(),
+        }
+    metadata += f"authority: {authority}\n" + _json_line("promotion", promotion)
     if verification_specs:
         if not isinstance(verification_specs, list):
             raise EvaluationError(f"{packet.packet_id}: verification must be a list")
@@ -385,7 +408,13 @@ def materialize_brain(packet: Packet, root: Path, workspace: Path) -> None:
         )
 
 
-def build_cerebro_context(packet: Packet, root: Path, workspace: Path) -> ContextResult:
+def build_cerebro_context(
+    packet: Packet,
+    root: Path,
+    workspace: Path,
+    *,
+    require_fresh: bool = True,
+) -> ContextResult:
     materialize_brain(packet, root, workspace)
     try:
         brain = Brain(root)
@@ -397,7 +426,7 @@ def build_cerebro_context(packet: Packet, root: Path, workspace: Path) -> Contex
         payload = brain.context(
             brain.project(packet.packet_id),
             query="",
-            require_fresh=True,
+            require_fresh=require_fresh,
             verify_evidence=True,
             cwd=workspace,
         )
@@ -458,6 +487,10 @@ def prompt_for_condition(
         additional = "No additional project context was supplied."
     elif condition == "agents":
         additional = f"AGENTS.md:\n{packet.agents_context.strip()}"
+    elif condition == "agents_current":
+        if not packet.agents_current_context:
+            raise EvaluationError("agents_current condition requires a suite baseline")
+        additional = f"AGENTS.md:\n{packet.agents_current_context.strip()}"
     else:
         if context is None:
             raise EvaluationError("Cerebro condition requires generated context")

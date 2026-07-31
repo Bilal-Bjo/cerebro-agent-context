@@ -10,7 +10,15 @@ Keep Cerebro useful by remembering only compact, reusable project truth.
 ## Reconcile
 
 1. Confirm the task is complete enough to support durable claims.
-2. Resolve and read current authority from the actual project checkout:
+2. Confirm task provenance was recorded before edits:
+
+   ```text
+   cerebro task init --cwd <project-checkout> --id <short-task-id> --json
+   ```
+
+   If it was not, do not invent a base. Source-bound automatic promotion is unavailable and the
+   candidate requires owner review.
+3. Resolve and read current authority from the actual project checkout:
 
    ```text
    cerebro resolve --cwd <project-checkout> --json
@@ -20,7 +28,7 @@ Keep Cerebro useful by remembering only compact, reusable project truth.
    If resolution, restricted access, validation, or evidence verification fails, report that
    boundary instead of guessing. Inspect age warnings; stale notes are excluded rather than treated
    as current authority.
-3. Update memory only when the result is likely to change a future action and at least one of these
+4. Update memory only when the result is likely to change a future action and at least one of these
    is true:
 
    - authoritative project state changed;
@@ -30,39 +38,38 @@ Keep Cerebro useful by remembering only compact, reusable project truth.
    - source-backed research changed a decision;
    - existing Cerebro authority was proven wrong, stale, or incomplete.
 
-4. Before editing, classify each candidate and emit one compact proposal:
+5. Classify each candidate:
 
-   - `accept`: an explicitly accepted user/owner decision, or a derived fact independently proven by
-     an owning source the agent did not change in this task;
-   - `review`: a plausible claim that needs user acceptance or independent verification, including
-     facts derived from files the agent created or changed in this task;
+   - `source-bound`: a derived fact independently proven by small owning files the agent did not
+     change since the recorded task base;
+   - `owner-accepted`: a durable decision or claim that requires exact interactive owner
+     confirmation;
    - `reject`: inference, duplicate source facts, temporary state, or task exhaust that should not
      become current authority.
 
-   Include the claim, class (`decision`, `derived`, or `inference`), owning source, whether the agent
-   changed that source, target note, and reason. Only `accept` proposals may be written
-   automatically. Inference never becomes current authority.
-5. Prefer correcting the existing note that owns the subject. Otherwise choose the narrowest
+   Inference never becomes current authority. Never grant authority by editing frontmatter
+   directly.
+6. Prefer correcting the existing note that owns the subject. Otherwise choose the narrowest
    appropriate type: State, decision, runbook, incident, or research. Do not create a task log.
-6. Write only claims proven by current source, tests, runtime output, or the owning service. When a
-   stable repository file directly supports an important claim, generate a bounded check:
+7. Write one exact structured proposal using the schema in
+   [`prompts/reconcile-cerebro.md`](../../prompts/reconcile-cerebro.md), then run:
 
    ```text
-   cerebro evidence hash \
+   cerebro proposal --brain <brain-path> check \
      --cwd <project-checkout> \
-     --path <project-relative-file> \
+     --file <proposal.json> \
      --json
    ```
 
-   Copy the returned `verification` object into the note's `verification` array. Use no more than
-   eight small, directly relevant regular files. A matching hash proves unchanged bytes, not that
-   the note's prose is true.
-7. Inspect the brain's Git status before editing. Preserve unrelated changes. Edit only the
-   resolved project partition, run `cerebro validate --json`, inspect the exact diff, and commit
-   only the intended note paths when the brain already has a safe local Git workflow.
-8. Do not create a remote, push, change authentication, or publish automatically. Remote policy
+   Apply a source-bound proposal only when `automatic_promotion_eligible` is true. For
+   owner-accepted authority, require the owner to type the exact note ID; never simulate, pre-fill,
+   pipe, or bypass confirmation. Apply with `cerebro proposal --brain <brain-path> apply ...`.
+8. Inspect the brain's Git status before applying. Preserve unrelated changes. Run
+   `cerebro validate --json`, inspect the exact diff, and commit only the intended note paths when
+   the brain already has a safe local Git workflow.
+9. Do not create a remote, push, change authentication, or publish automatically. Remote policy
    belongs to the brain owner.
-9. Re-run context with `--verify-evidence`, inspect age warnings, and confirm the corrected
+10. Re-run context with `--verify-evidence`, inspect age warnings, and confirm the corrected
    authority is returned.
 
 ## Refuse low-value memory

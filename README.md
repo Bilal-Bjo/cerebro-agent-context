@@ -20,24 +20,30 @@ decisions, and rules in local Markdown, makes age and evidence failures visible,
 out of current context by default. The engineering is tested; the workflow benefit is still being
 measured against repository-only and `AGENTS.md` baselines.
 
+**Brutally honest benchmark result:** on the four v2 differential failure modes, a perfectly
+maintained `AGENTS.md` tied Cerebro at 40/40 answers. Cerebro beat a stale `AGENTS.md`, not a good
+one. Its remaining value hypothesis is lower maintenance risk and visible provenance; the 14-day
+personal soak must prove that.
+
 **Want it?** Open a project and paste the
 [setup prompt](prompts/setup-cerebro.md) into your coding agent.
 
 **Want the proof instead of the pitch?** Read the
-[evaluation harness](evaluation/README.md). Its scenarios deliberately include cases Cerebro v0.2
-handles well and cases where it fails.
+[evaluation harness](evaluation/README.md). Its frozen v1 scenarios deliberately include cases
+Cerebro handles well and cases where it fails.
 
-**What changed in v0.2?** Cerebro now closes the loop: an agent can check current memory before
-work, decide after work whether anything is genuinely worth remembering, and bind important claims
-to the SHA-256 of the repository files that prove them. If a checked file changes, verified context
-fails closed instead of serving the old claim.
+**What changed in v0.3?** In the governed write path, a note cannot become trusted merely by
+declaring itself current. New notes state whether they were explicitly accepted by the owner,
+independently bound to untouched source, or remain a proposal. Cerebro records the task's Git base,
+refuses automatic promotion from evidence the agent changed during that task, warns on age, blocks
+on broken evidence, and includes a private 14-day workflow-soak recorder.
 
 Coding agents can remember things. The harder problem is deciding what they are still allowed to
 trust.
 
 Cerebro is a small, inspectable context layer for coding agents. It stores compact operational
 knowledge as Markdown, versions it with Git, separates current authority from historical evidence,
-and fails closed when important context has gone stale.
+and fails closed when declared evidence breaks.
 
 It works with any agent that can run a command and read JSON—including Codex, Claude Code, local
 agents, CI jobs, and custom harnesses.
@@ -97,7 +103,7 @@ The distinction matters:
 
 ## What is included
 
-Cerebro v0.2 provides:
+Cerebro v0.3 provides:
 
 - a dependency-free Python CLI;
 - project resolution from a working-directory path;
@@ -109,6 +115,10 @@ Cerebro v0.2 provides:
 - stale and non-current exclusion by default;
 - warning-first age handling with opt-in fail-closed `--require-fresh` retrieval;
 - optional project-file SHA-256 evidence with fail-closed `--verify-evidence` retrieval;
+- code-enforced `owner-accepted`, `source-bound`, and `proposal` authority;
+- task-base Git provenance that prevents self-authored evidence from being auto-promoted;
+- structured, atomic proposal application with exact owner confirmation;
+- a private, preregistered workflow-soak recorder that stores metrics rather than transcripts;
 - explicit, labelled historical retrieval;
 - restricted project and note gates;
 - stable note IDs and duplicate-ID validation;
@@ -265,11 +275,13 @@ Every current note is Markdown with small YAML-compatible frontmatter:
 
 ```markdown
 ---
-schema_version: 1
+schema_version: 2
 id: checkout-recovery-runbook
 project: northstar-shop
 type: runbook
 status: active
+authority: owner-accepted
+promotion: {"accepted_at":"2026-01-15T10:00:00+00:00","method":"interactive-owner-confirmation"}
 created: 2026-01-15
 updated: 2026-01-15
 last_verified: 2026-01-15
@@ -292,7 +304,7 @@ read_when: "Read before recovering a pending checkout."
 The frontmatter parser intentionally supports a small, predictable subset: scalar values and
 inline JSON arrays. This keeps the CLI dependency-free and the format easy to inspect.
 
-### Authority types
+### Note types
 
 | Type | Current status | Typical purpose | Default freshness |
 |---|---|---|---:|
@@ -307,7 +319,21 @@ Projects must contain exactly one `state/current` note and exactly one `referenc
 `role: agent-map`.
 
 Non-current statuses—including `stale`, `expired`, `superseded`, `rejected`, `resolved`, and
-`historical`—are excluded from normal retrieval.
+`historical`—are excluded from normal retrieval. `proposed` notes are also excluded.
+
+### Authority classes
+
+Note type says what a note is. Authority says why an agent may trust it:
+
+| Authority | Meaning | Promotion rule |
+|---|---|---|
+| `owner-accepted` | A durable choice or claim the owner explicitly accepted | The CLI requires typing the exact note ID interactively |
+| `source-bound` | A claim bound to repository evidence independent of this task | Every evidence path must be untouched since the recorded task base |
+| `proposal` | A candidate that has not earned authority | Never returned as current authority |
+
+Schema v1 notes remain readable for migration and are labelled `legacy-declared`. New notes use
+schema v2. A fresh date or valid hash is not enough by itself: the promotion record must also
+explain how authority was earned.
 
 ### Freshness
 
@@ -393,7 +419,7 @@ Useful source conventions include:
 
 Cerebro does not contact arbitrary source locators automatically. The locator tells a human or
 agent where the claim must be revalidated. Only explicit project-file `file-sha256` checks are
-executable in v0.2.
+executable in v0.3.
 
 ## CLI reference
 
@@ -457,7 +483,7 @@ Search current notes:
 cerebro search "deployment recovery" --project api --json
 ```
 
-Search is intentionally lexical in v0.2. For small operational brains, deterministic text search
+Search is intentionally lexical in v0.3. For small operational brains, deterministic text search
 is easier to audit than an embedding pipeline. Vector retrieval should be added only after an
 evaluation shows that text retrieval is insufficient.
 
@@ -471,6 +497,57 @@ cerebro evidence hash --cwd ~/code/api --path pyproject.toml --json
 
 The command never hashes paths outside the registered project root and never executes note-provided
 commands.
+
+### `cerebro task init`
+
+Record the clean Git commit from which the current task starts:
+
+```bash
+cerebro task init --cwd "$PWD" --id fix-checkout-retry --json
+```
+
+The record lives in Git's private metadata, not the repository. If the worktree is already dirty,
+task provenance cannot distinguish old changes from this task, so initialization refuses safely.
+
+### `cerebro proposal`
+
+Reconciliation writes an exact JSON proposal, then asks Cerebro—not the agent—to decide whether it
+can become authority:
+
+```bash
+cerebro proposal --brain ~/.cerebro check \
+  --cwd "$PWD" \
+  --file /tmp/cerebro-proposal.json \
+  --json
+
+cerebro proposal --brain ~/.cerebro apply \
+  --cwd "$PWD" \
+  --file /tmp/cerebro-proposal.json \
+  --json
+```
+
+A `source-bound` proposal is applied automatically only when all evidence paths were untouched
+since `cerebro task init`. An `owner-accepted` proposal always requires interactive confirmation by
+typing the exact note ID. Application is atomic, validates the complete brain, and reports the
+intended Git commit message. Cerebro does not commit or push.
+
+See [the reconciliation prompt](prompts/reconcile-cerebro.md) for the proposal schema.
+
+### `cerebro soak`
+
+Preregister a private 14-day personal-workflow measurement outside the brain:
+
+```bash
+cerebro soak --brain ~/.cerebro init --json
+cerebro soak --brain ~/.cerebro record --cwd "$PWD" --json
+cerebro soak --brain ~/.cerebro summary --json
+```
+
+`record` captures bounded context outcomes, warning/evidence counts, document counts, and latency.
+Optional owner ratings cover corrections, repeated explanations, false blocks, usefulness, and
+upkeep time. Missing ratings remain `unrated` and never count as success. No prompts, note contents,
+transcripts, paths, or credentials are stored. The result stays `open` until both the duration and
+minimum rated-task gates close.
 
 ### `cerebro show`
 
@@ -509,13 +586,15 @@ Add this task-boundary rule to your agent instructions:
 Before planning or editing:
 
 1. Fast-forward the Cerebro repository with normal Git safety.
-2. Run `cerebro context --cwd "$PWD" --verify-evidence --json`.
-3. Read the returned State and Agent Map.
-4. Inspect `status` and `warnings`; stale notes are excluded. Treat repository source, tests, and
+2. On a clean worktree, run `cerebro task init --cwd "$PWD" --id <task-id> --json`.
+3. Run `cerebro context --cwd "$PWD" --verify-evidence --json`.
+4. Read the returned State and Agent Map.
+5. Inspect `status` and `warnings`; stale notes are excluded. Treat repository source, tests, and
    runtime output as more authoritative than Cerebro.
-5. Never store credentials, sessions, cookies, private keys, or raw transcripts in Cerebro.
-6. After nontrivial work, use the `cerebro-reconcile` skill or reconciliation prompt. Update only
-   compact, proven context that will change a future action; otherwise update nothing.
+6. Never store credentials, sessions, cookies, private keys, or raw transcripts in Cerebro.
+7. After nontrivial work, use the `cerebro-reconcile` skill or reconciliation prompt. Submit a
+   structured proposal; never grant authority by editing frontmatter directly.
+8. During a registered soak, record one event and leave uncertain owner ratings `unrated`.
 ```
 
 For Codex, place it in `AGENTS.md`.
@@ -550,7 +629,7 @@ brain.
 ## Design principles
 
 1. **Current is a status, not a folder name.** A note becomes authority only when its type, status,
-   verification date, and sensitivity permit it.
+   authority class, verification date, and sensitivity permit it.
 2. **History must be requested.** Old evidence never silently competes with present truth.
 3. **Source wins over memory.** Code, tests, runtime output, and owning services correct Cerebro.
 4. **Plain text is a feature.** People must be able to inspect, diff, review, and repair the brain.
@@ -583,18 +662,18 @@ verifying claims against their owning sources.
 Cerebro is an alpha release extracted as a clean public implementation from a privately proven
 workflow. The public repository uses fresh Git history and completely synthetic examples.
 
-The v0.2 acceptance surface is covered by automated tests. The initial frozen synthetic evaluation
+The v0.3 acceptance surface is covered by automated tests. The initial frozen synthetic evaluation
 strongly favored Cerebro, including its known false-block case; read the
-[method and results](evaluation/RESULTS.md). Long-term personal workflow value still needs
-real-world soak.
+[frozen v1 method and results](evaluation/RESULTS.md) and the
+[maintained-AGENTS v2 result](evaluation/RESULTS_V2.md). Long-term personal workflow value still
+needs the preregistered real-world soak.
 
 ### Roadmap
 
 - JSON Schema files for editor integration.
 - Exact-path Git publication with conflict detection.
 - Pluggable project resolvers for Git remotes and monorepos.
-- Optional MCP server exposing read-only context tools.
-- Run and publish the retrieval evaluation before any trust-model or vector-search expansion.
+- Complete the preregistered 14-day personal workflow soak.
 - Signed release artifacts and PyPI publishing.
 - Expanded Windows path and terminal testing.
 
