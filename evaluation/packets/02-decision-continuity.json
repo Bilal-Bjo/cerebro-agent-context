@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "id": "decision-continuity",
+  "title": "Accepted idempotency decision",
+  "task": "What should the callback endpoint return when the same event is received twice?",
+  "answer_options": ["return_previous", "return_conflict", "process_again", "insufficient"],
+  "repository_files": {
+    "src/callbacks.py": "def handle_callback(event):\n    # Duplicate behavior is intentionally delegated to the product decision.\n    raise NotImplementedError\n",
+    "tests/test_callbacks.py": "# Duplicate callback behavior is not encoded here yet.\n"
+  },
+  "agents_context": "No duplicate callback policy is documented. Infer a reasonable HTTP behavior.",
+  "cerebro": {
+    "state": {
+      "summary": "Callback implementation is awaiting the accepted duplicate-event behavior.",
+      "body": "The callback endpoint still needs the accepted idempotency decision implemented."
+    },
+    "agent_map": {
+      "summary": "Read the accepted callback decision before implementing duplicate handling.",
+      "body": "Callback duplicate behavior is governed by the accepted decision note."
+    },
+    "notes": [
+      {
+        "id": "callback-idempotency",
+        "type": "decision",
+        "summary": "Duplicate callbacks return the previously recorded successful response.",
+        "body": "When the same callback event is received twice, return the previous successful response without processing it again."
+      }
+    ]
+  },
+  "expected": {
+    "answer": "return_previous",
+    "sources": ["cerebro:callback-idempotency"],
+    "forbidden_answers": ["return_conflict", "process_again"],
+    "cerebro_status": "current",
+    "block_relevant": false
+  }
+}

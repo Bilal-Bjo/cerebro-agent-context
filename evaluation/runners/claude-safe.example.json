@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "name": "claude-sonnet-safe",
+  "parser": "claude-json",
+  "command": [
+    "claude",
+    "--safe-mode",
+    "--print",
+    "--no-session-persistence",
+    "--tools",
+    "",
+    "--output-format",
+    "json",
+    "--model",
+    "sonnet",
+    "--max-budget-usd",
+    "0.15"
+  ],
+  "timeout_seconds": 180
+}

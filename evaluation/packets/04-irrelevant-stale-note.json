@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "irrelevant-stale-note",
+  "title": "Globally stale state blocks repository fact",
+  "task": "Which Python version should CI use?",
+  "answer_options": ["3.13", "3.11", "insufficient"],
+  "repository_files": {
+    ".python-version": "3.13\n",
+    ".github/workflows/ci.yml": "jobs:\n  test:\n    strategy:\n      matrix:\n        python-version: ['3.13']\n"
+  },
+  "agents_context": "CI historically ran Python 3.11.",
+  "cerebro": {
+    "freshness_days": {
+      "state": 1
+    },
+    "state": {
+      "summary": "CI follows the version declared in the repository.",
+      "body": "Use the repository Python version declaration for CI.",
+      "last_verified": "2020-01-01"
+    },
+    "agent_map": {
+      "summary": "Inspect CI and .python-version for runtime changes.",
+      "body": "Python version tasks are answered by repository configuration."
+    }
+  },
+  "expected": {
+    "answer": "3.13",
+    "sources": [".python-version", ".github/workflows/ci.yml"],
+    "forbidden_answers": ["3.11"],
+    "cerebro_status": "blocked",
+    "block_relevant": false
+  }
+}

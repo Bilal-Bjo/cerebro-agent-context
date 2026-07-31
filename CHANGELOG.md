@@ -4,6 +4,16 @@ All notable changes to Cerebro will be documented here.
 
 ## Unreleased
 
+- Add an isolated, deterministic evaluation harness comparing repository-only, `AGENTS.md`, and
+  Cerebro context across ten synthetic failure modes.
+- Record false task-boundary blocks separately from relevant evidence failures.
+- Add a safe-mode model runner with tool isolation, no session persistence, structured output, and
+  per-call budget enforcement.
+- Publish the frozen 90-run initial comparison and change recommended task-boundary behavior so age
+  warns by default while declared evidence failures still block.
+- Add explicit accept/review/reject reconciliation proposals and prohibit automatic acceptance of
+  facts derived from files changed by the agent in the same task.
+
 ## 0.2.0 — 2026-07-31
 
 - Add fail-closed project-file SHA-256 evidence generation and verification.

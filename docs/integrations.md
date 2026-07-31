@@ -13,9 +13,10 @@ Add the following to `AGENTS.md`:
 Before every task:
 
 1. Update the Cerebro repository with a fast-forward-only Git operation.
-2. Run `cerebro context --cwd "$PWD" --require-fresh --verify-evidence --json`.
+2. Run `cerebro context --cwd "$PWD" --verify-evidence --json`.
 3. Read the returned State and Agent Map before planning or editing.
-4. If project resolution or freshness fails, report the boundary failure instead of guessing.
+4. Inspect `status` and `warnings`. Stale notes are excluded; evidence, validation, access, and
+   resolution failures remain blocking.
 5. Source, tests, runtime output, and owning services outrank Cerebro.
 6. Never write credentials, cookies, sessions, private keys, customer data, or transcripts to the
    brain.
@@ -46,7 +47,6 @@ set -euo pipefail
 
 cerebro context \
   --cwd "${1:-$PWD}" \
-  --require-fresh \
   --verify-evidence \
   --json
 ```
@@ -68,7 +68,6 @@ result = subprocess.run(
         "context",
         "--cwd",
         "/workspace/project",
-        "--require-fresh",
         "--verify-evidence",
         "--json",
     ],
@@ -80,8 +79,9 @@ result = subprocess.run(
 context = json.loads(result.stdout)
 ```
 
-Exit code `3` indicates that requested authority is stale or non-current. Treat it as a context
-release gate, not as an empty search result.
+Exit code `3` indicates a strict freshness or declared evidence failure. Ordinary age staleness is
+reported in `status` and `warnings` when `--require-fresh` is omitted; stale notes are not returned.
+Use strict freshness only when age alone must be a release gate.
 
 Exit code `4` indicates that required current authority is restricted. Do not add `--restricted`
 automatically; obtain the appropriate authorization for that task.

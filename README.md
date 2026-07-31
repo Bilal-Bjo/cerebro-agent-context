@@ -15,13 +15,17 @@
 
 ## TL;DR
 
-**Cerebro gives your coding agent a trustworthy memory between sessions.** It keeps project state,
-decisions, and rules in local Markdown, tracks every change with Git, and refuses stale context
-instead of feeding it to the agent. It works with Codex, Claude Code, and any agent that can run a
-command—no vector database or transcript dumping required.
+**Cerebro is a strict, Git-backed project memory for coding agents.** It keeps project state,
+decisions, and rules in local Markdown, makes age and evidence failures visible, and keeps history
+out of current context by default. The engineering is tested; the workflow benefit is still being
+measured against repository-only and `AGENTS.md` baselines.
 
 **Want it?** Open a project and paste the
 [setup prompt](prompts/setup-cerebro.md) into your coding agent.
+
+**Want the proof instead of the pitch?** Read the
+[evaluation harness](evaluation/README.md). Its scenarios deliberately include cases Cerebro v0.2
+handles well and cases where it fails.
 
 **What changed in v0.2?** Cerebro now closes the loop: an agent can check current memory before
 work, decide after work whether anything is genuinely worth remembering, and bind important claims
@@ -39,7 +43,7 @@ It works with any agent that can run a command and read JSON—including Codex, 
 agents, CI jobs, and custom harnesses.
 
 ```bash
-cerebro context --cwd "$PWD" --require-fresh --verify-evidence --json
+cerebro context --cwd "$PWD" --verify-evidence --json
 ```
 
 That command answers more than “what might be relevant?” It answers:
@@ -103,7 +107,7 @@ Cerebro v0.2 provides:
 - freshness windows by note type;
 - explicit expiration through `expires_at`;
 - stale and non-current exclusion by default;
-- fail-closed `--require-fresh` retrieval;
+- warning-first age handling with opt-in fail-closed `--require-fresh` retrieval;
 - optional project-file SHA-256 evidence with fail-closed `--verify-evidence` retrieval;
 - explicit, labelled historical retrieval;
 - restricted project and note gates;
@@ -167,7 +171,6 @@ cerebro validate
 cerebro projects
 cerebro context \
   --cwd "$PWD/examples/northstar-shop/workspace" \
-  --require-fresh \
   --verify-evidence
 ```
 
@@ -353,12 +356,11 @@ Copy the returned object into a note:
 verification: [{"kind":"file-sha256","path":"pyproject.toml","sha256":"<digest>"}]
 ```
 
-Then require both time freshness and file evidence at the task boundary:
+Then verify declared file evidence while treating age as a visible warning:
 
 ```bash
 cerebro context \
   --cwd ~/code/api \
-  --require-fresh \
   --verify-evidence \
   --json
 ```
@@ -367,6 +369,10 @@ Evidence paths must be normalized, project-relative regular files. Absolute path
 traversal, symlinks, missing files, malformed hashes, and mismatches fail closed. A note may declare
 at most eight checks. Checks compare exact bytes; repositories shared across operating systems
 should declare a consistent text policy such as `* text=auto eol=lf` in `.gitattributes`.
+
+Use `--require-fresh` only when a task is consequential enough that age alone must stop it. A hash
+detects byte changes in a declared file; it does not prove that the note's prose follows from those
+bytes.
 
 ### Provenance
 
@@ -430,7 +436,7 @@ cerebro resolve --cwd ~/code/api --json
 Return bounded project context:
 
 ```bash
-cerebro context --cwd "$PWD" --require-fresh --verify-evidence --json
+cerebro context --cwd "$PWD" --verify-evidence --json
 ```
 
 Important flags:
@@ -503,9 +509,10 @@ Add this task-boundary rule to your agent instructions:
 Before planning or editing:
 
 1. Fast-forward the Cerebro repository with normal Git safety.
-2. Run `cerebro context --cwd "$PWD" --require-fresh --verify-evidence --json`.
+2. Run `cerebro context --cwd "$PWD" --verify-evidence --json`.
 3. Read the returned State and Agent Map.
-4. Treat repository source, tests, and runtime output as more authoritative than Cerebro.
+4. Inspect `status` and `warnings`; stale notes are excluded. Treat repository source, tests, and
+   runtime output as more authoritative than Cerebro.
 5. Never store credentials, sessions, cookies, private keys, or raw transcripts in Cerebro.
 6. After nontrivial work, use the `cerebro-reconcile` skill or reconciliation prompt. Update only
    compact, proven context that will change a future action; otherwise update nothing.
@@ -547,7 +554,8 @@ brain.
 2. **History must be requested.** Old evidence never silently competes with present truth.
 3. **Source wins over memory.** Code, tests, runtime output, and owning services correct Cerebro.
 4. **Plain text is a feature.** People must be able to inspect, diff, review, and repair the brain.
-5. **Fail closed at task boundaries.** Missing or stale authority should stop consequential work.
+5. **Block on broken evidence, warn on age by default.** Stale notes stay out of context; use
+   strict freshness only when age alone must stop the task.
 6. **Keep the brain small.** Store durable operational knowledge, not transcripts or task exhaust.
 7. **Vendor neutrality matters.** The same verified context should work across agent runtimes.
 
@@ -575,8 +583,10 @@ verifying claims against their owning sources.
 Cerebro is an alpha release extracted as a clean public implementation from a privately proven
 workflow. The public repository uses fresh Git history and completely synthetic examples.
 
-The v0.2 acceptance surface is covered by automated tests, but long-term cross-platform and
-multi-user use still needs real-world soak.
+The v0.2 acceptance surface is covered by automated tests. The initial frozen synthetic evaluation
+strongly favored Cerebro, including its known false-block case; read the
+[method and results](evaluation/RESULTS.md). Long-term personal workflow value still needs
+real-world soak.
 
 ### Roadmap
 
@@ -584,7 +594,7 @@ multi-user use still needs real-world soak.
 - Exact-path Git publication with conflict detection.
 - Pluggable project resolvers for Git remotes and monorepos.
 - Optional MCP server exposing read-only context tools.
-- Retrieval evaluation harness before any vector-search backend.
+- Run and publish the retrieval evaluation before any trust-model or vector-search expansion.
 - Signed release artifacts and PyPI publishing.
 - Expanded Windows path and terminal testing.
 

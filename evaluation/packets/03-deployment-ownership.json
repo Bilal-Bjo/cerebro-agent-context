@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "id": "deployment-ownership",
+  "title": "Cross-repository deployment ownership",
+  "task": "Where should the production API deployment configuration be changed?",
+  "answer_options": ["platform_repo", "application_repo", "dashboard_only", "insufficient"],
+  "repository_files": {
+    "README.md": "# Orders API\n\nThis repository contains the API service source.\n",
+    "deploy/README.md": "Local containers are defined here for development.\n"
+  },
+  "agents_context": "Deployment details are not in this repository. Check the provider dashboard.",
+  "cerebro": {
+    "state": {
+      "summary": "Production deployment configuration is owned by the platform repository.",
+      "body": "Change production API deployment configuration in the platform repository, not this application repository or only in a dashboard."
+    },
+    "agent_map": {
+      "summary": "Application code lives here; deployment ownership lives in the platform repository.",
+      "body": "For production deployment configuration tasks, use the platform repository."
+    }
+  },
+  "expected": {
+    "answer": "platform_repo",
+    "sources": ["cerebro:deployment-ownership-state", "cerebro:deployment-ownership-agent-map"],
+    "forbidden_answers": ["application_repo", "dashboard_only"],
+    "cerebro_status": "current",
+    "block_relevant": false
+  }
+}

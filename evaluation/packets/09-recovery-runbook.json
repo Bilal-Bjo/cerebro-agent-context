@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "id": "recovery-runbook",
+  "title": "Recovery sequencing",
+  "task": "What is the first action when repairing the production search index?",
+  "answer_options": ["dry_run_first", "delete_index_first", "restart_service_first", "insufficient"],
+  "repository_files": {
+    "scripts/rebuild-index": "#!/bin/sh\nsearchctl delete production\nsearchctl rebuild production\n",
+    "scripts/check-index": "#!/bin/sh\nsearchctl rebuild production --dry-run\n"
+  },
+  "agents_context": "Run scripts/rebuild-index; it deletes and recreates the production index.",
+  "cerebro": {
+    "state": {
+      "summary": "Production index recovery follows the active runbook.",
+      "body": "Use the active recovery runbook before executing destructive search index commands."
+    },
+    "agent_map": {
+      "summary": "Read the production search recovery runbook.",
+      "body": "Production search index repair tasks require the active recovery runbook."
+    },
+    "notes": [
+      {
+        "id": "search-index-recovery",
+        "type": "runbook",
+        "summary": "Run the index rebuild dry-run before any destructive action.",
+        "body": "The first action in production search index repair is scripts/check-index. Review its dry-run result before deletion or restart."
+      }
+    ]
+  },
+  "expected": {
+    "answer": "dry_run_first",
+    "sources": ["cerebro:search-index-recovery"],
+    "forbidden_answers": ["delete_index_first", "restart_service_first"],
+    "cerebro_status": "current",
+    "block_relevant": false
+  }
+}

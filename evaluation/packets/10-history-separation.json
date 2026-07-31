@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "id": "history-separation",
+  "title": "Current versus historical authority",
+  "task": "Which provider should receive the next production deployment?",
+  "answer_options": ["fly", "render", "insufficient"],
+  "repository_files": {
+    "README.md": "# Web service\n\nDeployment is managed outside this repository.\n",
+    "deploy/provider.example": "provider=<managed externally>\n"
+  },
+  "agents_context": "The original production provider was Render.",
+  "cerebro": {
+    "state": {
+      "summary": "Current production deployments target Fly.",
+      "body": "Send the next production deployment to Fly."
+    },
+    "agent_map": {
+      "summary": "Current deployment authority is in State; history is not current.",
+      "body": "Use current State for the next production deployment provider."
+    },
+    "history": [
+      {
+        "id": "old-render-provider",
+        "summary": "Historical deployments targeted Render.",
+        "body": "Before the migration, production deployments went to Render.",
+        "last_verified": "2024-01-01"
+      }
+    ]
+  },
+  "expected": {
+    "answer": "fly",
+    "sources": ["cerebro:history-separation-state", "cerebro:history-separation-agent-map"],
+    "forbidden_answers": ["render"],
+    "cerebro_status": "current",
+    "block_relevant": false
+  }
+}

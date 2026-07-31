@@ -347,6 +347,11 @@ class PublicWorkflowAssetTests(unittest.TestCase):
         self.assertIn("do not create a remote", combined)
         self.assertIn("credentials", combined)
         self.assertIn("--verify-evidence", combined)
+        self.assertIn("accept", combined)
+        self.assertIn("review", combined)
+        self.assertIn("reject", combined)
+        self.assertIn("agent did not create or change", combined)
+        self.assertIn("matching hash proves unchanged bytes", combined)
 
 
 if __name__ == "__main__":
