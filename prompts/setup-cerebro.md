@@ -36,8 +36,8 @@ The observable end state is:
 5. The project’s agent instructions contain a task-boundary Cerebro rule without overwriting
    existing instructions.
 6. `cerebro validate` passes.
-7. `cerebro context --cwd <project-root> --require-fresh --verify-evidence --json` resolves the
-   project and returns its State and Agent Map with declared file evidence verified.
+7. `cerebro context --cwd <project-root> --verify-evidence --json` resolves the project, returns
+   current State and Agent Map, reports age warnings, and verifies declared file evidence.
 
 Safety and authority rules:
 
@@ -186,16 +186,16 @@ AGENTS.md only when an equivalent rule is not already present:
 
 Before planning or editing:
 
-1. Run `cerebro context --brain ~/.cerebro --cwd "$PWD" --require-fresh --verify-evidence --json`.
+1. Run `cerebro context --brain ~/.cerebro --cwd "$PWD" --verify-evidence --json`.
 2. Read the returned State and Agent Map.
-3. If project resolution, validation, freshness, or restricted access fails, report the exact
-   boundary failure instead of guessing.
+3. Inspect status and warnings. Stale notes are excluded; if resolution, validation, evidence, or
+   restricted access fails, report the exact boundary failure instead of guessing.
 4. Current source, tests, runtime output, and owning services outrank Cerebro.
 5. Never store credentials, cookies, sessions, private keys, customer data, or raw transcripts in
    Cerebro.
-6. After nontrivial work, apply the durable-value gate: update Cerebro only for changed
-   authoritative state, a durable decision, a proven runbook, an incident correction, source-backed
-   research that changed a decision, or a correction to wrong/stale memory.
+6. After nontrivial work, classify candidates as accept, review, or reject. Automatically write
+   only explicitly accepted decisions or facts independently proven by a source the agent did not
+   change in the task.
 7. Prefer correcting an existing note. Never create task logs, copy source code, or remember
    temporary plans merely because work occurred.
 
@@ -220,7 +220,6 @@ cerebro resolve --brain ~/.cerebro --cwd <absolute-project-root> --json
 cerebro context \
   --brain ~/.cerebro \
   --cwd <absolute-project-root> \
-  --require-fresh \
   --verify-evidence \
   --json
 
@@ -228,7 +227,7 @@ Verify from the actual JSON that:
 
 - validation and doctor are healthy;
 - the intended project ID resolved;
-- the context status is current;
+- status and age warnings are visible, and stale notes were excluded;
 - every declared evidence check passed;
 - history was not included;
 - the expected State and Agent Map are present;

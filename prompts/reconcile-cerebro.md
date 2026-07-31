@@ -7,10 +7,10 @@ Cerebro needs a compact update. If your agent supports skills, use
 ```text
 Reconcile the work just completed into Cerebro only if it produced reusable project truth.
 
-First resolve the current project and read its existing State and Agent Map with freshness and
-evidence checks enabled. Current source, tests, runtime output, and the owning service outrank
-Cerebro. Stop and report any resolution, freshness, access, or evidence failure instead of
-guessing.
+First resolve the current project and read its existing State and Agent Map with evidence checks
+enabled. Current source, tests, runtime output, and the owning service outrank Cerebro. Stop and
+report any resolution, validation, access, or evidence failure instead of guessing. Inspect age
+warnings; stale notes are excluded rather than treated as current authority.
 
 Apply this strict durable-value gate. Update Cerebro only if the result is likely to change a
 future agent's action and it records one of:
@@ -25,6 +25,18 @@ future agent's action and it records one of:
 Prefer correcting the existing note that owns the subject. Otherwise use the narrowest suitable
 State, decision, runbook, incident, or research note. Never create a task diary.
 
+Before editing, classify every candidate and produce a compact proposal:
+
+- accept: an explicitly accepted user/owner decision, or a derived fact independently proven by an
+  owning source the agent did not create or change in this task;
+- review: a plausible claim requiring user acceptance or independent verification, including any
+  fact derived from files the agent created or changed in this task;
+- reject: inference, duplicate source facts, temporary state, or task exhaust.
+
+For each proposal state: claim, class (decision, derived, or inference), owning source, whether the
+agent changed that source, target note, and reason. Automatically write only accept proposals.
+Inference never becomes current authority.
+
 Write only claims proven during this task. If an important claim depends on a stable repository
 file, run:
 
@@ -34,7 +46,8 @@ cerebro evidence hash \
   --json
 
 Add the returned verification object to the note's verification array. Use no more than eight
-small, directly relevant regular files.
+small, directly relevant regular files. A matching hash proves unchanged bytes, not that the note's
+prose follows from those bytes.
 
 Before editing, inspect the brain's Git status and preserve unrelated changes. Edit only the
 resolved project partition. Never store transcripts, hidden reasoning, credentials, cookies,
@@ -52,9 +65,9 @@ After editing:
    cerebro context \
      --brain <brain-path> \
      --cwd <project-checkout> \
-     --require-fresh \
      --verify-evidence \
      --json
 
-If nothing passes the durable-value gate, make no Cerebro change and say so briefly.
+Inspect the returned status and age warnings. If nothing passes the durable-value gate, make no
+Cerebro change and say so briefly.
 ```
