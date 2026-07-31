@@ -99,6 +99,25 @@ Cerebro v0.1 provides:
 
 ## Quick start
 
+### Set up Cerebro with an AI agent
+
+Open the project you want Cerebro to understand, then paste the
+[universal setup prompt](prompts/setup-cerebro.md) into Codex, Claude Code, or another capable
+coding agent.
+
+The prompt guides the agent through a safe, source-backed setup:
+
+- install the public CLI through a user-scoped method;
+- initialize or reuse a private local brain;
+- register the current project exactly once;
+- build its first State and Agent Map from inspected repository evidence;
+- add task-boundary instructions without replacing existing agent rules;
+- validate freshness-required retrieval;
+- create local Git history without configuring or pushing a remote.
+
+It explicitly forbids secrets, raw transcripts, blind overwrites, global permission changes, and
+automatic publication.
+
 ### 1. Install from source
 
 Python 3.11 or newer is required.
