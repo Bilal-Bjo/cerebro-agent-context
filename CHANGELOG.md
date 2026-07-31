@@ -2,6 +2,11 @@
 
 All notable changes to Cerebro will be documented here.
 
+## Unreleased
+
+- Add a universal, safety-aware setup prompt for Codex, Claude Code, and other coding agents.
+- Link the prompt from the README quick start.
+
 ## 0.1.0 — 2026-07-31
 
 Initial public alpha:
