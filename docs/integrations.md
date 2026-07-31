@@ -13,12 +13,14 @@ Add the following to `AGENTS.md`:
 Before every task:
 
 1. Update the Cerebro repository with a fast-forward-only Git operation.
-2. Run `cerebro context --cwd "$PWD" --require-fresh --json`.
+2. Run `cerebro context --cwd "$PWD" --require-fresh --verify-evidence --json`.
 3. Read the returned State and Agent Map before planning or editing.
 4. If project resolution or freshness fails, report the boundary failure instead of guessing.
 5. Source, tests, runtime output, and owning services outrank Cerebro.
 6. Never write credentials, cookies, sessions, private keys, customer data, or transcripts to the
    brain.
+7. After nontrivial work, use the `cerebro-reconcile` skill or reconciliation prompt. Remember only
+   compact, proven changes that will affect a future action.
 ```
 
 The exact Git update command belongs to your environment. Do not place a token in the instruction
@@ -45,6 +47,7 @@ set -euo pipefail
 cerebro context \
   --cwd "${1:-$PWD}" \
   --require-fresh \
+  --verify-evidence \
   --json
 ```
 
@@ -66,6 +69,7 @@ result = subprocess.run(
         "--cwd",
         "/workspace/project",
         "--require-fresh",
+        "--verify-evidence",
         "--json",
     ],
     check=True,
@@ -81,6 +85,21 @@ release gate, not as an empty search result.
 
 Exit code `4` indicates that required current authority is restricted. Do not add `--restricted`
 automatically; obtain the appropriate authorization for that task.
+
+## After-work reconciliation
+
+Use the repository's [`cerebro-reconcile` skill](../skills/cerebro-reconcile/SKILL.md) when your
+agent runtime supports reusable skills. Otherwise paste the
+[reconciliation prompt](../prompts/reconcile-cerebro.md) after meaningful work.
+
+Both paths apply the same gate:
+
+- correct an existing note before creating a new one;
+- remember only durable facts that will change a future action;
+- bind important claims to small project files when deterministic evidence helps;
+- validate and inspect the exact diff;
+- do nothing when no claim passes the gate;
+- never push or change remote policy automatically.
 
 ## CI
 

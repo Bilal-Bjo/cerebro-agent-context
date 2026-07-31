@@ -9,6 +9,7 @@ updated: 2026-01-15
 last_verified: 2026-01-15
 sensitivity: internal
 sources: ["repo://northstar-shop@4b3c2d1", "run://northstar-shop/test-suite"]
+verification: [{"kind":"file-sha256","path":"README.md","sha256":"3e4e4cee20b6967fa9150c9e15acbb7c08d5839d10c69448af8570097130b4d2"}]
 tags: ["checkout", "payments", "release"]
 supersedes: []
 summary: "Current authority for the fictional Northstar Shop service."
@@ -34,5 +35,6 @@ event identifier.
 
 ## Verification
 
-The fake source revision and test-run locator above demonstrate provenance syntax. They do not
-refer to a reachable private system.
+The fake source revision and test-run locator above demonstrate provenance syntax. The
+`file-sha256` check binds this note to the synthetic workspace README so
+`--verify-evidence` can demonstrate a real pass or fail without referring to a private system.

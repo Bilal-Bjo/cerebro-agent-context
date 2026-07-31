@@ -8,7 +8,7 @@ The prompt defaults to:
 
 - the current repository as the first Cerebro project;
 - `~/.cerebro` as the private brain;
-- the public `v0.1.0` release of Cerebro;
+- the public `v0.2.0` release of Cerebro;
 - local Git history without creating or pushing a remote.
 
 Change those defaults in the first paragraph before pasting if needed.
@@ -19,7 +19,7 @@ Set up Cerebro for the project currently open in this workspace.
 Use these defaults unless the local environment proves they are unsuitable:
 
 - Cerebro brain: ~/.cerebro
-- Cerebro release: v0.1.0 from
+- Cerebro release: v0.2.0 from
   https://github.com/Bilal-Bjo/cerebro-agent-context
 - First project root: the current Git repository root, or the current working directory when this
   is not a Git repository
@@ -36,8 +36,8 @@ The observable end state is:
 5. The project’s agent instructions contain a task-boundary Cerebro rule without overwriting
    existing instructions.
 6. `cerebro validate` passes.
-7. `cerebro context --cwd <project-root> --require-fresh --json` resolves the project and returns
-   its State and Agent Map.
+7. `cerebro context --cwd <project-root> --require-fresh --verify-evidence --json` resolves the
+   project and returns its State and Agent Map with declared file evidence verified.
 
 Safety and authority rules:
 
@@ -89,11 +89,11 @@ Use the first suitable user-scoped option already supported by the machine:
 
 1. `uv tool install` from the Git tag:
 
-   uv tool install "git+https://github.com/Bilal-Bjo/cerebro-agent-context.git@v0.1.0"
+   uv tool install "git+https://github.com/Bilal-Bjo/cerebro-agent-context.git@v0.2.0"
 
 2. `pipx install` from the Git tag:
 
-   pipx install "git+https://github.com/Bilal-Bjo/cerebro-agent-context.git@v0.1.0"
+   pipx install "git+https://github.com/Bilal-Bjo/cerebro-agent-context.git@v0.2.0"
 
 3. a dedicated virtual environment under the user’s local application-data directory, plus a
    user-local launcher.
@@ -164,6 +164,19 @@ Do not fill either note with generic advice, guessed architecture, transient tas
 transcript, or copied secrets. If a material fact cannot be verified, omit it or label the
 verification gate rather than presenting it as current.
 
+For important claims that depend directly on one or more stable repository files, generate a
+bounded check:
+
+cerebro evidence hash \
+  --brain ~/.cerebro \
+  --cwd <absolute-project-root> \
+  --path <project-relative-file> \
+  --json
+
+Copy each returned verification object into the owning note's `verification` array. Use at most
+eight small, directly relevant regular files. Do not bind a note to generated files, dependencies,
+logs, databases, secret-bearing configuration, or broad directories.
+
 F. Add the task-boundary rule
 
 Preserve all existing instructions. Add the following bounded section to the project-root
@@ -173,14 +186,18 @@ AGENTS.md only when an equivalent rule is not already present:
 
 Before planning or editing:
 
-1. Run `cerebro context --brain ~/.cerebro --cwd "$PWD" --require-fresh --json`.
+1. Run `cerebro context --brain ~/.cerebro --cwd "$PWD" --require-fresh --verify-evidence --json`.
 2. Read the returned State and Agent Map.
 3. If project resolution, validation, freshness, or restricted access fails, report the exact
    boundary failure instead of guessing.
 4. Current source, tests, runtime output, and owning services outrank Cerebro.
 5. Never store credentials, cookies, sessions, private keys, customer data, or raw transcripts in
    Cerebro.
-6. After nontrivial work, update only compact durable context that was revalidated during the task.
+6. After nontrivial work, apply the durable-value gate: update Cerebro only for changed
+   authoritative state, a durable decision, a proven runbook, an incident correction, source-backed
+   research that changed a decision, or a correction to wrong/stale memory.
+7. Prefer correcting an existing note. Never create task logs, copy source code, or remember
+   temporary plans merely because work occurred.
 
 If AGENTS.md does not exist, create it with only this section.
 
@@ -204,6 +221,7 @@ cerebro context \
   --brain ~/.cerebro \
   --cwd <absolute-project-root> \
   --require-fresh \
+  --verify-evidence \
   --json
 
 Verify from the actual JSON that:
@@ -211,6 +229,7 @@ Verify from the actual JSON that:
 - validation and doctor are healthy;
 - the intended project ID resolved;
 - the context status is current;
+- every declared evidence check passed;
 - history was not included;
 - the expected State and Agent Map are present;
 - no restricted content was requested implicitly.

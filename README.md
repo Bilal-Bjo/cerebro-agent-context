@@ -23,6 +23,11 @@ command—no vector database or transcript dumping required.
 **Want it?** Open a project and paste the
 [setup prompt](prompts/setup-cerebro.md) into your coding agent.
 
+**What changed in v0.2?** Cerebro now closes the loop: an agent can check current memory before
+work, decide after work whether anything is genuinely worth remembering, and bind important claims
+to the SHA-256 of the repository files that prove them. If a checked file changes, verified context
+fails closed instead of serving the old claim.
+
 Coding agents can remember things. The harder problem is deciding what they are still allowed to
 trust.
 
@@ -34,7 +39,7 @@ It works with any agent that can run a command and read JSON—including Codex, 
 agents, CI jobs, and custom harnesses.
 
 ```bash
-cerebro context --cwd "$PWD" --require-fresh --json
+cerebro context --cwd "$PWD" --require-fresh --verify-evidence --json
 ```
 
 That command answers more than “what might be relevant?” It answers:
@@ -88,7 +93,7 @@ The distinction matters:
 
 ## What is included
 
-Cerebro v0.1 provides:
+Cerebro v0.2 provides:
 
 - a dependency-free Python CLI;
 - project resolution from a working-directory path;
@@ -99,13 +104,16 @@ Cerebro v0.1 provides:
 - explicit expiration through `expires_at`;
 - stale and non-current exclusion by default;
 - fail-closed `--require-fresh` retrieval;
+- optional project-file SHA-256 evidence with fail-closed `--verify-evidence` retrieval;
 - explicit, labelled historical retrieval;
 - restricted project and note gates;
 - stable note IDs and duplicate-ID validation;
 - non-echoing detection of common credential-shaped values;
 - JSON output for agent and automation integration;
 - a completely fictional Northstar Shop example;
-- behavioral tests for the trust boundary.
+- behavioral tests for the trust boundary;
+- a reusable reconciliation skill and copy-paste prompt that reject transcripts and low-value
+  memory.
 
 ## Quick start
 
@@ -122,6 +130,7 @@ The prompt guides the agent through a safe, source-backed setup:
 - register the current project exactly once;
 - build its first State and Agent Map from inspected repository evidence;
 - add task-boundary instructions without replacing existing agent rules;
+- add the strict after-work reconciliation loop;
 - validate freshness-required retrieval;
 - create local Git history without configuring or pushing a remote.
 
@@ -158,7 +167,8 @@ cerebro validate
 cerebro projects
 cerebro context \
   --cwd "$PWD/examples/northstar-shop/workspace" \
-  --require-fresh
+  --require-fresh \
+  --verify-evidence
 ```
 
 Search current authority:
@@ -231,6 +241,20 @@ git commit -m "Initialize Cerebro"
 
 Do not commit credentials, cookies, exported sessions, private keys, tokens, customer data, or
 unreviewed transcripts.
+
+### 4. Close the memory loop
+
+After meaningful work, use the [reconciliation prompt](prompts/reconcile-cerebro.md) or install the
+reusable [`cerebro-reconcile` skill](skills/cerebro-reconcile/SKILL.md). The agent first applies a
+strict durable-value gate. It updates nothing when the result is temporary, already obvious in
+source, or unlikely to change a future action.
+
+The loop is deliberately asymmetric:
+
+```text
+before work: verify and read current authority
+after work:  remember only durable, proven changes
+```
 
 ## The note model
 
@@ -309,6 +333,40 @@ Without `--require-fresh`, stale authority is omitted and the context response r
 With `--require-fresh`, Cerebro exits with code `3` before returning stale authority. It exits with
 code `4` when required current authority is restricted and explicit access was not provided.
 
+### Executable evidence
+
+Freshness answers “when was this checked?” File evidence can additionally answer “has the source
+that proved this claim changed?”
+
+Generate a check from the registered project checkout:
+
+```bash
+cerebro evidence hash \
+  --cwd ~/code/api \
+  --path pyproject.toml \
+  --json
+```
+
+Copy the returned object into a note:
+
+```yaml
+verification: [{"kind":"file-sha256","path":"pyproject.toml","sha256":"<digest>"}]
+```
+
+Then require both time freshness and file evidence at the task boundary:
+
+```bash
+cerebro context \
+  --cwd ~/code/api \
+  --require-fresh \
+  --verify-evidence \
+  --json
+```
+
+Evidence paths must be normalized, project-relative regular files. Absolute paths, parent
+traversal, symlinks, missing files, malformed hashes, and mismatches fail closed. A note may declare
+at most eight checks.
+
 ### Provenance
 
 Every note requires at least a `sources` list field. A source is a locator, not a secret:
@@ -326,8 +384,9 @@ Useful source conventions include:
 - `https://` for an authoritative public page;
 - `cerebro://` for another stable Cerebro note or project.
 
-Cerebro does not contact these sources automatically in v0.1. The locator tells a human or agent
-where the claim must be revalidated.
+Cerebro does not contact arbitrary source locators automatically. The locator tells a human or
+agent where the claim must be revalidated. Only explicit project-file `file-sha256` checks are
+executable in v0.2.
 
 ## CLI reference
 
@@ -370,7 +429,7 @@ cerebro resolve --cwd ~/code/api --json
 Return bounded project context:
 
 ```bash
-cerebro context --cwd "$PWD" --require-fresh --json
+cerebro context --cwd "$PWD" --require-fresh --verify-evidence --json
 ```
 
 Important flags:
@@ -378,6 +437,7 @@ Important flags:
 - `--project <id>` selects an explicit project.
 - `--query <text>` narrows non-routing context.
 - `--require-fresh` fails when current authority is stale.
+- `--verify-evidence` fails when a declared project-file hash no longer matches.
 - `--include-stale` includes stale notes with warnings.
 - `--history` includes labelled historical evidence.
 - `--restricted` explicitly allows restricted content.
@@ -390,9 +450,20 @@ Search current notes:
 cerebro search "deployment recovery" --project api --json
 ```
 
-Search is intentionally lexical in v0.1. For small operational brains, deterministic text search
+Search is intentionally lexical in v0.2. For small operational brains, deterministic text search
 is easier to audit than an embedding pipeline. Vector retrieval should be added only after an
 evaluation shows that text retrieval is insufficient.
+
+### `cerebro evidence hash`
+
+Create a non-executable SHA-256 verification object for one project-relative regular file:
+
+```bash
+cerebro evidence hash --cwd ~/code/api --path pyproject.toml --json
+```
+
+The command never hashes paths outside the registered project root and never executes note-provided
+commands.
 
 ### `cerebro show`
 
@@ -431,10 +502,12 @@ Add this task-boundary rule to your agent instructions:
 Before planning or editing:
 
 1. Fast-forward the Cerebro repository with normal Git safety.
-2. Run `cerebro context --cwd "$PWD" --require-fresh --json`.
+2. Run `cerebro context --cwd "$PWD" --require-fresh --verify-evidence --json`.
 3. Read the returned State and Agent Map.
 4. Treat repository source, tests, and runtime output as more authoritative than Cerebro.
 5. Never store credentials, sessions, cookies, private keys, or raw transcripts in Cerebro.
+6. After nontrivial work, use the `cerebro-reconcile` skill or reconciliation prompt. Update only
+   compact, proven context that will change a future action; otherwise update nothing.
 ```
 
 For Codex, place it in `AGENTS.md`.
@@ -501,7 +574,7 @@ verifying claims against their owning sources.
 Cerebro is an alpha release extracted as a clean public implementation from a privately proven
 workflow. The public repository uses fresh Git history and completely synthetic examples.
 
-The v0.1 acceptance surface is covered by automated tests, but long-term cross-platform and
+The v0.2 acceptance surface is covered by automated tests, but long-term cross-platform and
 multi-user use still needs real-world soak.
 
 ### Roadmap

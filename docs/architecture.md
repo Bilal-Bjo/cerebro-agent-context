@@ -17,6 +17,7 @@ current-note loader ────► Markdown + frontmatter
        ├── structural validation
        ├── status filtering
        ├── freshness calculation
+       ├── optional file evidence
        ├── sensitivity gate
        └── lexical query
        │
@@ -61,6 +62,7 @@ A note is current authority only when:
 - its status is current for that type;
 - its freshness window has not expired;
 - its `expires_at` date, when present, has not passed;
+- every declared project-file SHA-256 check matches when evidence verification is required;
 - its sensitivity is allowed by the retrieval request;
 - the note and project both pass validation.
 
@@ -78,9 +80,10 @@ movement. Cerebro’s roadmap requires a retrieval evaluation before accepting t
 ## Write model
 
 The CLI scaffolds a brain and project partitions. Ongoing note changes are ordinary file edits
-reviewed and versioned through Git.
+reviewed and versioned through Git. The reusable reconciliation skill adds a strict after-work
+durable-value gate without granting itself remote publication authority.
 
-The public v0.1 does not yet implement an opinionated publication command. Exact-path publication,
+The public v0.2 does not implement an opinionated publication command. Exact-path publication,
 remote same-path conflict detection, and protected control-plane updates are roadmap work and
 should not be inferred from the current CLI.
 

@@ -4,8 +4,14 @@ All notable changes to Cerebro will be documented here.
 
 ## Unreleased
 
-- Add a universal, safety-aware setup prompt for Codex, Claude Code, and other coding agents.
-- Link the prompt from the README quick start.
+## 0.2.0 — 2026-07-31
+
+- Add fail-closed project-file SHA-256 evidence generation and verification.
+- Add a strict after-work reconciliation skill and copy-paste prompt.
+- Update the universal setup prompt and agent integrations to use the complete before/after memory
+  loop.
+- Keep remote creation, pushes, credential handling, and transcript collection outside the public
+  workflow.
 
 ## 0.1.0 — 2026-07-31
 
@@ -20,3 +26,4 @@ Initial public alpha:
 - synthetic Northstar Shop example;
 - behavioral test suite;
 - Codex, Claude Code, architecture, and security documentation.
+- universal, safety-aware setup prompt linked from the README.
