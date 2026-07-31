@@ -13,6 +13,16 @@
 
 </div>
 
+## TL;DR
+
+**Cerebro gives your coding agent a trustworthy memory between sessions.** It keeps project state,
+decisions, and rules in local Markdown, tracks every change with Git, and refuses stale context
+instead of feeding it to the agent. It works with Codex, Claude Code, and any agent that can run a
+command—no vector database or transcript dumping required.
+
+**Want it?** Open a project and paste the
+[setup prompt](prompts/setup-cerebro.md) into your coding agent.
+
 Coding agents can remember things. The harder problem is deciding what they are still allowed to
 trust.
 
