@@ -4,6 +4,14 @@ All notable changes to Cerebro will be documented here.
 
 ## Unreleased
 
+- Add schema v2 authority classes: `owner-accepted`, `source-bound`, and non-authoritative
+  `proposal`, while keeping schema v1 readable as labelled legacy authority.
+- Add clean task-base Git provenance and refuse source-bound automatic promotion when an evidence
+  path was committed, staged, unstaged, or created during the task.
+- Add exact structured proposal checking and atomic application. Owner authority requires exact
+  interactive note-ID confirmation.
+- Add an owner-only, preregistered 14-day soak recorder with explicit unrated handling and no
+  prompt, transcript, note-content, or credential collection.
 - Add an isolated, deterministic evaluation harness comparing repository-only, `AGENTS.md`, and
   Cerebro context across ten synthetic failure modes.
 - Record false task-boundary blocks separately from relevant evidence failures.
@@ -11,8 +19,10 @@ All notable changes to Cerebro will be documented here.
   per-call budget enforcement.
 - Publish the frozen 90-run initial comparison and change recommended task-boundary behavior so age
   warns by default while declared evidence failures still block.
-- Add explicit accept/review/reject reconciliation proposals and prohibit automatic acceptance of
-  facts derived from files changed by the agent in the same task.
+- Commit the exact structured v1 result records and add a versioned v2 suite with a
+  maintained-current `AGENTS.md` upper-bound condition and age-warning regression coverage.
+- Publish the ten-repeat v2 differential records, preserve a discovered baseline-renderer bias,
+  and report the corrected result: maintained-current `AGENTS.md` tied Cerebro on answer accuracy.
 
 ## 0.2.0 — 2026-07-31
 

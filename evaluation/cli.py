@@ -9,17 +9,16 @@ from pathlib import Path
 from typing import Any
 
 from .model import (
-    CONDITIONS,
     ContextResult,
     EvaluationError,
     build_cerebro_context,
-    load_packets,
     materialize_repository,
     prompt_for_condition,
     response_schema,
 )
 from .runner import load_runner, run_prompt
 from .scoring import score_run, summarize
+from .suites import load_suite, load_suite_packets
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PACKETS = ROOT / "evaluation" / "packets"
@@ -29,11 +28,13 @@ def _selected(raw: str | None) -> set[str] | None:
     return {item.strip() for item in raw.split(",") if item.strip()} if raw else None
 
 
-def _conditions(raw: str) -> tuple[str, ...]:
+def _conditions(raw: str, allowed: tuple[str, ...]) -> tuple[str, ...]:
     values = tuple(item.strip() for item in raw.split(",") if item.strip())
-    unknown = sorted(set(values) - set(CONDITIONS))
+    unknown = sorted(set(values) - set(allowed))
     if unknown or not values or len(set(values)) != len(values):
-        raise EvaluationError("conditions must be unique repository, agents, or cerebro values")
+        raise EvaluationError(
+            f"conditions must be unique values from {', '.join(allowed)}"
+        )
     return values
 
 
@@ -58,45 +59,75 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
     validate = sub.add_parser("validate", help="Validate packets and generated Cerebro contexts")
-    validate.add_argument("--packets-dir", type=Path, default=DEFAULT_PACKETS)
+    validate.add_argument("--suite", choices=("v1", "v2"), default="v1")
     validate.add_argument("--packets")
     validate.add_argument("--json", action="store_true")
 
     run = sub.add_parser("run", help="Run bounded model evaluations")
-    run.add_argument("--packets-dir", type=Path, default=DEFAULT_PACKETS)
+    run.add_argument("--suite", choices=("v1", "v2"), default="v1")
     run.add_argument("--packets")
     run.add_argument("--runner", type=Path, required=True)
-    run.add_argument("--conditions", default="repository,agents,cerebro")
+    run.add_argument("--conditions")
     run.add_argument("--repeats", type=int, default=1)
     run.add_argument("--seed", type=int, default=20260731)
     run.add_argument("--max-runs", type=int, default=45)
     run.add_argument("--output", type=Path, required=True)
 
     summary = sub.add_parser("summarize", help="Summarize bounded JSONL results")
-    summary.add_argument("--input", type=Path, required=True)
+    summary.add_argument("--input", type=Path, action="append", required=True)
+    summary.add_argument(
+        "--conditions",
+        help="Optional comma-separated condition filter for composable exact result files",
+    )
     summary.add_argument("--json", action="store_true")
     return parser
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
-    packets = load_packets(args.packets_dir, _selected(args.packets))
+    suite = load_suite(ROOT, args.suite)
+    packets = load_suite_packets(suite, _selected(args.packets))
     results: list[dict[str, Any]] = []
     for packet in packets:
         with tempfile.TemporaryDirectory(prefix="cerebro-eval-") as temporary:
             temporary_root = Path(temporary)
             workspace = temporary_root / "workspace"
             materialize_repository(packet, workspace)
-            context = build_cerebro_context(packet, temporary_root / "brain", workspace)
+            context = build_cerebro_context(
+                packet,
+                temporary_root / "brain",
+                workspace,
+                require_fresh=suite.cerebro_require_fresh,
+            )
+            actual_warning_ids = (
+                tuple(
+                    warning["id"]
+                    for warning in context.payload.get("warnings", [])
+                    if "id" in warning
+                )
+                if context.payload is not None
+                else ()
+            )
             results.append(
                 {
                     "id": packet.packet_id,
                     "cerebro_status": context.status,
                     "expected_status": packet.expected.cerebro_status,
                     "status_matches": context.status == packet.expected.cerebro_status,
+                    "warning_ids": actual_warning_ids,
+                    "expected_warning_ids": packet.expected.warning_ids,
+                    "warnings_match": set(actual_warning_ids)
+                    == set(packet.expected.warning_ids),
                 }
             )
     payload = {
-        "status": "ok" if all(item["status_matches"] for item in results) else "failed",
+        "status": (
+            "ok"
+            if all(
+                item["status_matches"] and item["warnings_match"] for item in results
+            )
+            else "failed"
+        ),
+        "suite": suite.suite_id,
         "packets": results,
     }
     if args.json:
@@ -106,7 +137,8 @@ def cmd_validate(args: argparse.Namespace) -> int:
         for item in results:
             print(
                 f"{item['id']}: {item['cerebro_status']} "
-                f"(expected {item['expected_status']})"
+                f"(expected {item['expected_status']}; "
+                f"warnings {'match' if item['warnings_match'] else 'mismatch'})"
             )
     return 0 if payload["status"] == "ok" else 2
 
@@ -163,8 +195,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         raise EvaluationError("max-runs must be between 1 and 500")
     if args.output.exists():
         raise EvaluationError(f"refusing to overwrite existing results: {args.output}")
-    packets = load_packets(args.packets_dir, _selected(args.packets))
-    conditions = _conditions(args.conditions)
+    suite = load_suite(ROOT, args.suite)
+    packets = load_suite_packets(suite, _selected(args.packets))
+    conditions = (
+        _conditions(args.conditions, suite.conditions)
+        if args.conditions
+        else suite.conditions
+    )
     jobs = [
         (packet, condition, repetition)
         for packet in packets
@@ -188,6 +225,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 packet,
                 temporary_root / "brain",
                 workspace,
+                require_fresh=suite.cerebro_require_fresh,
             )
             prompt = prompt_for_condition(
                 packet,
@@ -228,7 +266,13 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_summarize(args: argparse.Namespace) -> int:
-    payload = summarize(_load_records(args.input))
+    selected = _selected(args.conditions)
+    payload = summarize(
+        record
+        for path in args.input
+        for record in _load_records(path)
+        if selected is None or record.get("condition") in selected
+    )
     if args.json:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:

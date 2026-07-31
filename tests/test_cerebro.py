@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -10,6 +11,13 @@ from pathlib import Path
 
 from cerebro_context.cli import main
 from cerebro_context.core import Brain, CerebroError, init_brain, scaffold_project
+from cerebro_context.governance import (
+    apply_proposal,
+    assess_source_provenance,
+    check_proposal,
+    init_task,
+)
+from cerebro_context.soak import init_soak, record_soak, summarize_soak
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE_BRAIN = ROOT / "examples" / "northstar-shop" / "brain"
@@ -114,6 +122,18 @@ class CerebroTemporaryBrainTests(unittest.TestCase):
         brain = Brain(self.root)
         self.assertEqual(brain.validate(), [])
         self.assertEqual(brain.resolve(self.workspace).id, "example-project")
+        state = brain.current_notes(brain.project("example-project"))[0]
+        self.assertEqual(state.metadata["schema_version"], 2)
+
+    def test_schema_one_cannot_forge_schema_two_authority(self) -> None:
+        state_path = self.project_path / "State.md"
+        state_path.write_text(
+            state_path.read_text().replace("schema_version: 2", "schema_version: 1")
+        )
+        issues = Brain(self.root).validate()
+        self.assertTrue(
+            any("cannot declare authority or promotion" in issue.message for issue in issues)
+        )
 
     def test_require_fresh_fails_closed(self) -> None:
         config_path = self.root / "cerebro.json"
@@ -336,6 +356,121 @@ class CerebroTemporaryBrainTests(unittest.TestCase):
         self.assertIn("project validation failed", str(caught.exception))
         self.assertIn("exactly kind, path, and sha256", str(caught.exception))
 
+    def _init_workspace_git(self) -> None:
+        subprocess.run(["git", "init"], cwd=self.workspace, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.name", "Cerebro Test"],
+            cwd=self.workspace,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.email", "cerebro@example.invalid"],
+            cwd=self.workspace,
+            check=True,
+        )
+        (self.workspace / "project.txt").write_text("independent source\n")
+        subprocess.run(["git", "add", "project.txt"], cwd=self.workspace, check=True)
+        subprocess.run(
+            ["git", "commit", "-m", "fixture"],
+            cwd=self.workspace,
+            check=True,
+            capture_output=True,
+        )
+
+    def _proposal(self, authority: str = "source-bound") -> Path:
+        proposal = Path(self.temp.name) / f"{authority}.json"
+        proposal.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "id": f"{authority}-fact",
+                    "project": "example-project",
+                    "type": "research",
+                    "target": f"research/{authority}-fact.md",
+                    "sensitivity": "internal",
+                    "sources": ["repo://example/project.txt"],
+                    "tags": ["test"],
+                    "supersedes": [],
+                    "summary": "A bounded test fact.",
+                    "read_when": "Read only in tests.",
+                    "title": "Bounded Fact",
+                    "body": "The independent source remains unchanged.",
+                    "requested_authority": authority,
+                    "evidence_paths": (
+                        ["project.txt"] if authority == "source-bound" else []
+                    ),
+                }
+            )
+        )
+        return proposal
+
+    def test_source_bound_proposal_requires_clean_task_provenance(self) -> None:
+        self._init_workspace_git()
+        init_task(self.workspace, "proposal-test")
+        proposal = self._proposal()
+        brain = Brain(self.root)
+        checked = check_proposal(brain, self.workspace, proposal)
+        self.assertTrue(checked["automatic_promotion_eligible"])
+        applied = apply_proposal(brain, self.workspace, proposal)
+        self.assertEqual(applied["authority"], "source-bound")
+        note = brain.show("source-bound-fact")
+        self.assertEqual(note["authority"], "source-bound")
+
+    def test_missing_task_metadata_prevents_automatic_promotion(self) -> None:
+        self._init_workspace_git()
+        checked = check_proposal(
+            Brain(self.root),
+            self.workspace,
+            self._proposal(),
+        )
+        self.assertFalse(checked["automatic_promotion_eligible"])
+        self.assertEqual(checked["provenance"]["reason"], "missing task metadata")
+
+    def test_task_init_refuses_dirty_worktree(self) -> None:
+        self._init_workspace_git()
+        (self.workspace / "untracked.txt").write_text("existing change\n")
+        with self.assertRaises(CerebroError) as caught:
+            init_task(self.workspace, "dirty-task")
+        self.assertIn("clean Git worktree", str(caught.exception))
+
+    def test_agent_touched_evidence_forces_review(self) -> None:
+        self._init_workspace_git()
+        init_task(self.workspace, "proposal-test")
+        (self.workspace / "project.txt").write_text("changed in task\n")
+        provenance = assess_source_provenance(self.workspace, ["project.txt"])
+        self.assertFalse(provenance["eligible"])
+        with self.assertRaises(CerebroError) as caught:
+            apply_proposal(Brain(self.root), self.workspace, self._proposal())
+        self.assertEqual(caught.exception.exit_code, 3)
+        self.assertIn("requires review", str(caught.exception))
+
+    def test_owner_acceptance_requires_exact_interactive_confirmation(self) -> None:
+        self._init_workspace_git()
+        proposal = self._proposal("owner-accepted")
+        with self.assertRaises(CerebroError):
+            apply_proposal(
+                Brain(self.root),
+                self.workspace,
+                proposal,
+                input_fn=lambda _: "no",
+            )
+        applied = apply_proposal(
+            Brain(self.root),
+            self.workspace,
+            proposal,
+            input_fn=lambda _: "owner-accepted-fact",
+        )
+        self.assertEqual(applied["authority"], "owner-accepted")
+
+    def test_soak_keeps_unrated_fields_out_of_success_denominators(self) -> None:
+        state_dir = Path(self.temp.name) / "soak"
+        init_soak(state_dir, days=14, min_rated_tasks=1)
+        event = record_soak(Brain(self.root), self.workspace, state_dir)
+        self.assertEqual(event["owner_rated"]["false_block"], "unrated")
+        summary = summarize_soak(state_dir)
+        self.assertEqual(summary["rated_tasks"], 0)
+        self.assertFalse(summary["gates"]["minimum_rated_tasks"])
+
 
 class PublicWorkflowAssetTests(unittest.TestCase):
     def test_reconciliation_assets_keep_remote_and_secret_boundaries(self) -> None:
@@ -347,11 +482,11 @@ class PublicWorkflowAssetTests(unittest.TestCase):
         self.assertIn("do not create a remote", combined)
         self.assertIn("credentials", combined)
         self.assertIn("--verify-evidence", combined)
-        self.assertIn("accept", combined)
-        self.assertIn("review", combined)
+        self.assertIn("source-bound", combined)
+        self.assertIn("owner-accepted", combined)
         self.assertIn("reject", combined)
-        self.assertIn("agent did not create or change", combined)
-        self.assertIn("matching hash proves unchanged bytes", combined)
+        self.assertIn("automatic_promotion_eligible", combined)
+        self.assertIn("matching hash proves unchanged", combined)
 
 
 if __name__ == "__main__":

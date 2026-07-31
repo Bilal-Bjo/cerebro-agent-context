@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "id": "v2",
+  "packets_dir": "evaluation/packets",
+  "conditions": ["repository", "agents", "agents_current", "cerebro"],
+  "cerebro_require_fresh": false,
+  "packets": {
+    "stale-queue-backend": {
+      "maintenance_dossier": "Current queue configuration declares River. Repository configuration remains the owning source for queue backend changes.",
+      "agents_current_sources": ["agents:AGENTS.md", "config/queue.toml"]
+    },
+    "decision-continuity": {
+      "maintenance_dossier": "The accepted callback idempotency decision returns the previously recorded success response when an event is received again.",
+      "agents_current_sources": ["agents:AGENTS.md"]
+    },
+    "deployment-ownership": {
+      "maintenance_dossier": "Production API deployment configuration is owned by the platform repository, not the application repository or provider dashboard.",
+      "agents_current_sources": ["agents:AGENTS.md"]
+    },
+    "irrelevant-stale-note": {
+      "maintenance_dossier": "The repository's .python-version and CI workflow are the current authority for the CI Python version.",
+      "cerebro_status": "current",
+      "warning_ids": ["irrelevant-stale-note-state"],
+      "agents_current_sources": ["agents:AGENTS.md", ".python-version", ".github/workflows/ci.yml"]
+    },
+    "semantic-hash-trap": {
+      "maintenance_dossier": "The live status file is the current deployment-provider authority. A matching file hash only establishes unchanged bytes, not that unrelated prose is true.",
+      "agents_current_sources": ["agents:AGENTS.md", "ops/live-status.json"]
+    },
+    "duplicated-version": {
+      "maintenance_dossier": "Package metadata and the package __version__ declaration are the owning sources for the current release version.",
+      "agents_current_sources": ["agents:AGENTS.md", "pyproject.toml", "src/example/__init__.py"]
+    },
+    "user-preference-decision": {
+      "maintenance_dossier": "The accepted owner preference for the settings navigation is compact density.",
+      "agents_current_sources": ["agents:AGENTS.md"]
+    },
+    "secret-storage-boundary": {
+      "maintenance_dossier": "Credential values never belong in the project memory repository. The owning credential manager or runtime retains them.",
+      "agents_current_sources": ["agents:AGENTS.md"]
+    },
+    "recovery-runbook": {
+      "maintenance_dossier": "The accepted production search-index recovery sequence begins with a dry run before any destructive or rebuilding action.",
+      "agents_current_sources": ["agents:AGENTS.md"]
+    },
+    "history-separation": {
+      "maintenance_dossier": "Fly is the current production deployment provider. Render is historical and must not receive new deployments.",
+      "agents_current_sources": ["agents:AGENTS.md"]
+    }
+  },
+  "differential_packets": [
+    "stale-queue-backend",
+    "irrelevant-stale-note",
+    "semantic-hash-trap",
+    "history-separation"
+  ],
+  "method": {
+    "status": "candidate",
+    "baseline": "The current AGENTS condition is mechanically rendered from a neutral maintenance dossier that contains project truth but no answer options, expected sources, forbidden answers, or scoring rules.",
+    "interpretation": "This is an upper-bound maintained-AGENTS comparison. It tests use of equally available current facts, not the cost of maintaining them.",
+    "freshness": "Cerebro uses warning-first age handling; stale authority is omitted and reported without blocking."
+  }
+}

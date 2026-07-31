@@ -15,6 +15,13 @@ from .core import (
     render_human_documents,
     scaffold_project,
 )
+from .governance import apply_proposal, check_proposal, init_task
+from .soak import (
+    default_state_dir,
+    init_soak,
+    record_soak,
+    summarize_soak,
+)
 
 
 def _add_brain(parser: argparse.ArgumentParser) -> None:
@@ -118,10 +125,85 @@ def build_parser() -> argparse.ArgumentParser:
     evidence_hash.add_argument("--cwd", type=Path, default=Path.cwd())
     evidence_hash.add_argument("--path", required=True)
     evidence_hash.add_argument("--json", action="store_true")
+
+    task = sub.add_parser("task", help="Record task-base provenance")
+    task_sub = task.add_subparsers(dest="task_command", required=True)
+    task_init = task_sub.add_parser("init", help="Record the clean task base commit")
+    task_init.add_argument("--cwd", type=Path, default=Path.cwd())
+    task_init.add_argument("--id", required=True)
+    task_init.add_argument("--json", action="store_true")
+
+    proposal = sub.add_parser(
+        "proposal",
+        help="Check or apply a structured authority proposal",
+    )
+    _add_brain(proposal)
+    proposal_sub = proposal.add_subparsers(dest="proposal_command", required=True)
+    proposal_check = proposal_sub.add_parser(
+        "check",
+        help="Check promotion eligibility without changing the brain",
+    )
+    proposal_check.add_argument("--cwd", type=Path, default=Path.cwd())
+    proposal_check.add_argument("--file", type=Path, required=True)
+    proposal_check.add_argument("--json", action="store_true")
+    proposal_apply = proposal_sub.add_parser(
+        "apply",
+        help="Apply an eligible proposal to the resolved project",
+    )
+    proposal_apply.add_argument("--cwd", type=Path, default=Path.cwd())
+    proposal_apply.add_argument("--file", type=Path, required=True)
+    proposal_apply.add_argument("--json", action="store_true")
+
+    soak = sub.add_parser("soak", help="Record bounded personal workflow evidence")
+    _add_brain(soak)
+    soak.add_argument("--state-dir", type=Path, default=default_state_dir())
+    soak_sub = soak.add_subparsers(dest="soak_command", required=True)
+    soak_init = soak_sub.add_parser("init", help="Preregister a bounded soak")
+    soak_init.add_argument("--days", type=int, default=14)
+    soak_init.add_argument("--minimum-rated-tasks", type=int, default=20)
+    soak_init.add_argument("--maximum-false-block-rate", type=float, default=0.05)
+    soak_init.add_argument(
+        "--maximum-repeated-explanation-rate",
+        type=float,
+        default=0.10,
+    )
+    soak_init.add_argument("--maximum-correction-rate", type=float, default=0.10)
+    soak_init.add_argument("--maximum-median-upkeep-seconds", type=int, default=60)
+    soak_init.add_argument("--json", action="store_true")
+    soak_record = soak_sub.add_parser(
+        "record",
+        help="Record objective context signals and optional owner ratings",
+    )
+    soak_record.add_argument("--cwd", type=Path, default=Path.cwd())
+    soak_record.add_argument(
+        "--correction-needed",
+        choices=("yes", "no", "unrated"),
+        default="unrated",
+    )
+    soak_record.add_argument(
+        "--repeated-explanation",
+        choices=("yes", "no", "unrated"),
+        default="unrated",
+    )
+    soak_record.add_argument(
+        "--false-block",
+        choices=("yes", "no", "unrated"),
+        default="unrated",
+    )
+    soak_record.add_argument(
+        "--useful-context",
+        choices=("yes", "no", "unrated"),
+        default="unrated",
+    )
+    soak_record.add_argument("--upkeep-seconds", type=int)
+    soak_record.add_argument("--json", action="store_true")
+    soak_summary = soak_sub.add_parser("summary", help="Summarize preregistered soak gates")
+    soak_summary.add_argument("--json", action="store_true")
     return parser
 
 
 def run(args: argparse.Namespace) -> int:
+    payload: Any
     if args.command == "init":
         init_brain(args.brain, force=args.force)
         print(f"Initialized Cerebro at {args.brain.expanduser().resolve()}")
@@ -130,9 +212,14 @@ def run(args: argparse.Namespace) -> int:
         target = scaffold_project(args.brain, args.project_id, args.name, args.root)
         print(f"Scaffolded {args.project_id} at {target}")
         return 0
+    if args.command == "task":
+        if args.task_command != "init":
+            raise CerebroError(f"unsupported task command '{args.task_command}'")
+        payload = init_task(args.cwd, args.id)
+        _emit(payload, args.json)
+        return 0
 
     brain = Brain(args.brain)
-    payload: Any
     if args.command == "projects":
         payload = [
             {
@@ -154,6 +241,44 @@ def run(args: argparse.Namespace) -> int:
             raise CerebroError(f"unsupported evidence command '{args.evidence_command}'")
         project = brain.resolve(args.cwd)
         payload = {"verification": brain.hash_evidence(project, args.cwd, args.path)}
+        _emit(payload, args.json)
+        return 0
+    if args.command == "proposal":
+        if args.proposal_command == "check":
+            payload = check_proposal(brain, args.cwd, args.file)
+        elif args.proposal_command == "apply":
+            payload = apply_proposal(brain, args.cwd, args.file)
+        else:
+            raise CerebroError(f"unsupported proposal command '{args.proposal_command}'")
+        _emit(payload, args.json)
+        return 0
+    if args.command == "soak":
+        state_dir = args.state_dir.expanduser()
+        if args.soak_command == "init":
+            payload = init_soak(
+                state_dir,
+                days=args.days,
+                min_rated_tasks=args.minimum_rated_tasks,
+                max_false_block_rate=args.maximum_false_block_rate,
+                max_repeated_explanation_rate=args.maximum_repeated_explanation_rate,
+                max_correction_rate=args.maximum_correction_rate,
+                max_median_upkeep_seconds=args.maximum_median_upkeep_seconds,
+            )
+        elif args.soak_command == "record":
+            payload = record_soak(
+                brain,
+                args.cwd,
+                state_dir,
+                correction_needed=args.correction_needed,
+                repeated_explanation=args.repeated_explanation,
+                false_block=args.false_block,
+                useful_context=args.useful_context,
+                upkeep_seconds=args.upkeep_seconds,
+            )
+        elif args.soak_command == "summary":
+            payload = summarize_soak(state_dir)
+        else:
+            raise CerebroError(f"unsupported soak command '{args.soak_command}'")
         _emit(payload, args.json)
         return 0
     if args.command == "validate":

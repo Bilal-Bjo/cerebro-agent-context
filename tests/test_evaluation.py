@@ -25,6 +25,7 @@ from evaluation.runner import (
     validate_runner_safety,
 )
 from evaluation.scoring import score_run, summarize
+from evaluation.suites import load_suite, load_suite_packets, render_agents_current
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -79,6 +80,41 @@ class EvaluationPacketTests(unittest.TestCase):
         scores = score_run(packet, "cerebro", context, result)
         self.assertTrue(scores["false_block"])
         self.assertTrue(scores["answer_correct"])
+
+    def test_v2_warns_on_age_without_blocking(self) -> None:
+        suite = load_suite(ROOT, "v2")
+        packets = load_suite_packets(suite, {"irrelevant-stale-note"})
+        packet = packets[0]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace = root / "workspace"
+            materialize_repository(packet, workspace)
+            context = build_cerebro_context(
+                packet,
+                root / "brain",
+                workspace,
+                require_fresh=suite.cerebro_require_fresh,
+            )
+        self.assertEqual(context.status, "current")
+        self.assertIsNotNone(context.payload)
+        warning_ids = {
+            warning["id"]
+            for warning in context.payload["warnings"]
+            if "id" in warning
+        }
+        self.assertEqual(warning_ids, {"irrelevant-stale-note-state"})
+
+    def test_v2_has_current_agents_baseline_for_every_packet(self) -> None:
+        suite = load_suite(ROOT, "v2")
+        packets = load_suite_packets(suite)
+        self.assertEqual(len(packets), 10)
+        self.assertTrue(all(packet.agents_current_context for packet in packets))
+        for packet in packets:
+            dossier = suite.packets[packet.packet_id]["maintenance_dossier"]
+            self.assertEqual(
+                packet.agents_current_context,
+                render_agents_current(dossier),
+            )
 
 
 class RunnerTests(unittest.TestCase):
@@ -240,6 +276,58 @@ class EvaluationCliTests(unittest.TestCase):
         self.assertEqual(cerebro["overall_accuracy"], 1.0)
         self.assertEqual(cerebro["context_gate_accuracy"], 1.0)
         self.assertEqual(cerebro["false_blocks"], 1)
+
+    def test_both_frozen_and_candidate_suites_validate(self) -> None:
+        for suite in ("v1", "v2"):
+            with self.subTest(suite=suite), redirect_stdout(StringIO()):
+                self.assertEqual(main(["validate", "--suite", suite]), 0)
+
+    def test_summary_condition_filter_composes_exact_result_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "records.jsonl"
+            records = []
+            for condition in ("repository", "agents_current"):
+                records.append(
+                    {
+                        "condition": condition,
+                        "response": {"answer": "river"},
+                        "scores": {
+                            "answer_correct": True,
+                            "source_correct": True,
+                            "overall_correct": True,
+                            "stale_adoption": False,
+                            "context_status": "not_applicable",
+                            "context_gate_correct": None,
+                            "false_block": False,
+                        },
+                        "metrics": {
+                            "latency_ms": 1,
+                            "input_tokens": 1,
+                            "output_tokens": 1,
+                            "cost_usd": 0.01,
+                        },
+                    }
+                )
+            path.write_text(
+                "\n".join(json.dumps(record) for record in records) + "\n"
+            )
+            output = StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(
+                    main(
+                        [
+                            "summarize",
+                            "--input",
+                            str(path),
+                            "--conditions",
+                            "agents_current",
+                            "--json",
+                        ]
+                    ),
+                    0,
+                )
+            payload = json.loads(output.getvalue())
+            self.assertEqual(set(payload["conditions"]), {"agents_current"})
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 SENSITIVITIES = {"public", "internal", "restricted"}
@@ -26,7 +26,16 @@ ALL_STATUSES = {
     **CURRENT_STATUSES,
     "log": {"historical"},
 }
-NONCURRENT_STATUSES = {"stale", "expired", "superseded", "rejected", "resolved", "historical"}
+NONCURRENT_STATUSES = {
+    "stale",
+    "expired",
+    "superseded",
+    "rejected",
+    "resolved",
+    "historical",
+    "proposed",
+}
+AUTHORITIES = {"owner-accepted", "source-bound", "proposal"}
 REQUIRED_NOTE_FIELDS = {
     "schema_version",
     "id",
@@ -102,6 +111,11 @@ class Note:
     @property
     def sensitivity(self) -> str:
         return str(self.metadata.get("sensitivity", "internal"))
+
+    @property
+    def authority(self) -> str:
+        value = self.metadata.get("authority")
+        return str(value) if value is not None else "legacy-declared"
 
     def title(self) -> str:
         for line in self.body.splitlines():
@@ -278,6 +292,85 @@ def validate_verification(note: Note) -> list[Issue]:
     return issues
 
 
+def validate_authority(note: Note) -> list[Issue]:
+    schema_version = note.metadata.get("schema_version")
+    authority = note.metadata.get("authority")
+    if schema_version == 1:
+        if authority is not None or "promotion" in note.metadata:
+            return [
+                Issue(
+                    str(note.path),
+                    "schema_version 1 notes cannot declare authority or promotion; migrate to 2",
+                )
+            ]
+        return []
+    if schema_version == 2 and authority is None:
+        return [Issue(str(note.path), "schema_version 2 notes require authority")]
+    if not isinstance(authority, str) or authority not in AUTHORITIES:
+        return [
+            Issue(
+                str(note.path),
+                "authority must be owner-accepted, source-bound, or proposal",
+            )
+        ]
+    if authority == "source-bound" and not note.metadata.get("verification"):
+        return [Issue(str(note.path), "source-bound authority requires verification")]
+    if authority == "proposal" and note.status in CURRENT_STATUSES.get(
+        note.note_type, set()
+    ):
+        return [Issue(str(note.path), "proposal authority cannot use a current status")]
+
+    promotion = note.metadata.get("promotion")
+    if schema_version != 2 or authority == "proposal":
+        return []
+    if not isinstance(promotion, dict):
+        return [Issue(str(note.path), f"{authority} authority requires promotion metadata")]
+    expected_method = (
+        "interactive-owner-confirmation"
+        if authority == "owner-accepted"
+        else "task-provenance"
+    )
+    if promotion.get("method") != expected_method:
+        return [
+            Issue(
+                str(note.path),
+                f"{authority} promotion.method must be {expected_method}",
+            )
+        ]
+    accepted_at = promotion.get("accepted_at")
+    if not isinstance(accepted_at, str):
+        return [Issue(str(note.path), "promotion.accepted_at must be an ISO timestamp")]
+    try:
+        datetime.fromisoformat(accepted_at)
+    except ValueError:
+        return [Issue(str(note.path), "promotion.accepted_at must be an ISO timestamp")]
+
+    if authority == "source-bound":
+        if set(promotion) != {"method", "accepted_at", "task_id", "base_commit"}:
+            return [
+                Issue(
+                    str(note.path),
+                    "source-bound promotion must contain exactly method, accepted_at, "
+                    "task_id, and base_commit",
+                )
+            ]
+        if (
+            not isinstance(promotion.get("task_id"), str)
+            or not promotion["task_id"]
+            or not isinstance(promotion.get("base_commit"), str)
+            or not re.fullmatch(r"[0-9a-f]{40}", promotion["base_commit"])
+        ):
+            return [Issue(str(note.path), "source-bound promotion metadata is invalid")]
+    elif set(promotion) != {"method", "accepted_at"}:
+        return [
+            Issue(
+                str(note.path),
+                "owner-accepted promotion must contain exactly method and accepted_at",
+            )
+        ]
+    return []
+
+
 def validate_note(note: Note, expected_project: str) -> list[Issue]:
     issues: list[Issue] = []
     missing = sorted(REQUIRED_NOTE_FIELDS - note.metadata.keys())
@@ -286,8 +379,8 @@ def validate_note(note: Note, expected_project: str) -> list[Issue]:
         return issues
 
     data = note.metadata
-    if data["schema_version"] != 1:
-        issues.append(Issue(str(note.path), "schema_version must be 1"))
+    if data["schema_version"] not in {1, 2}:
+        issues.append(Issue(str(note.path), "schema_version must be 1 or 2"))
     if not isinstance(data["id"], str) or not SLUG_RE.fullmatch(data["id"]):
         issues.append(Issue(str(note.path), "id must be a lowercase kebab-case slug"))
     if data["project"] != expected_project:
@@ -325,6 +418,7 @@ def validate_note(note: Note, expected_project: str) -> list[Issue]:
 
     issues.extend(scan_secrets(note))
     issues.extend(validate_verification(note))
+    issues.extend(validate_authority(note))
     return issues
 
 
@@ -584,9 +678,17 @@ class Brain:
                     issues.append(Issue(str(note.path), f"duplicate note id also used by {ids[note.id]}"))
                 else:
                     ids[note.id] = note.path
-                if note.note_type == "state" and note.status == "current":
+                if (
+                    note.note_type == "state"
+                    and note.status == "current"
+                    and note.authority != "proposal"
+                ):
                     state_count += 1
-                if note.note_type == "reference" and note.metadata.get("role") == "agent-map":
+                if (
+                    note.note_type == "reference"
+                    and note.metadata.get("role") == "agent-map"
+                    and note.authority != "proposal"
+                ):
                     map_count += 1
             if state_count != 1:
                 issues.append(Issue(str(project.path), "project must have exactly one current state note"))
@@ -595,6 +697,8 @@ class Brain:
         return issues
 
     def stale_reason(self, note: Note) -> str | None:
+        if note.authority == "proposal":
+            return "authority is an unaccepted proposal"
         if note.status not in CURRENT_STATUSES.get(note.note_type, set()):
             return "status is not current authority"
         today = utc_now().date()
@@ -644,9 +748,17 @@ class Brain:
                     Issue(str(note.path), f"duplicate note id in project: {note.id}")
                 )
             ids.add(note.id)
-            if note.note_type == "state" and note.status == "current":
+            if (
+                note.note_type == "state"
+                and note.status == "current"
+                and note.authority != "proposal"
+            ):
                 state_count += 1
-            if note.note_type == "reference" and note.metadata.get("role") == "agent-map":
+            if (
+                note.note_type == "reference"
+                and note.metadata.get("role") == "agent-map"
+                and note.authority != "proposal"
+            ):
                 map_count += 1
         if state_count != 1:
             validation_issues.append(
@@ -666,6 +778,7 @@ class Brain:
             for note in all_candidates
             if not self.authorize(note, restricted)
             and note.status in CURRENT_STATUSES.get(note.note_type, set())
+            and note.authority != "proposal"
         ]
         if require_fresh and unauthorized_authority:
             raise CerebroError(
@@ -687,7 +800,11 @@ class Brain:
             note
             for note in candidates
             if note.status in CURRENT_STATUSES.get(note.note_type, set())
+            and note.authority != "proposal"
             and self.stale_reason(note) is None
+        ]
+        legacy_authority = [
+            note for note in authority if note.authority == "legacy-declared"
         ]
         declared_evidence = sum(
             len(note.metadata.get("verification", []))
@@ -775,10 +892,21 @@ class Brain:
                 if declared_evidence and not verify_evidence
                 else []
             )
+            + (
+                [
+                    {
+                        "reason": "legacy note has no explicit authority classification",
+                        "count": len(legacy_authority),
+                    }
+                ]
+                if legacy_authority
+                else []
+            )
             + [
                 {"id": note.id, "reason": reason}
                 for note, reason in stale
-                if include_stale or require_fresh
+                if note.status in CURRENT_STATUSES.get(note.note_type, set())
+                and note.authority != "proposal"
             ],
         }
 
@@ -868,6 +996,7 @@ class Brain:
             "project": note.project,
             "type": note.note_type,
             "status": note.status,
+            "authority": note.authority,
             "partition": note.partition,
             "current": stale_reason is None,
             "last_verified": note.metadata.get("last_verified"),
@@ -921,13 +1050,23 @@ def _note_template(
 ) -> str:
     today = iso_today()
     role_line = f"role: {role}\n" if role else ""
+    promotion = json.dumps(
+        {
+            "method": "interactive-owner-confirmation",
+            "accepted_at": utc_now().isoformat(),
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
     return (
         "---\n"
-        "schema_version: 1\n"
+        "schema_version: 2\n"
         f"id: {note_id}\n"
         f"project: {project_id}\n"
         f"type: {note_type}\n"
         f"status: {status}\n"
+        "authority: owner-accepted\n"
+        f"promotion: {promotion}\n"
         f"{role_line}"
         f"created: {today}\n"
         f"updated: {today}\n"

@@ -15,6 +15,7 @@ project resolver ───────► project.json
 current-note loader ────► Markdown + frontmatter
        │
        ├── structural validation
+       ├── authority promotion validation
        ├── status filtering
        ├── freshness calculation
        ├── optional file evidence
@@ -60,6 +61,8 @@ A note is current authority only when:
 
 - its type is supported;
 - its status is current for that type;
+- schema v2 records `owner-accepted` or `source-bound` authority rather than `proposal`;
+- its promotion metadata satisfies the selected authority class;
 - its freshness window has not expired;
 - its `expires_at` date, when present, has not passed;
 - every declared project-file SHA-256 check matches when evidence verification is required;
@@ -77,15 +80,31 @@ remain compact, and exact terms are inspectable during debugging.
 An embedding backend adds ranking opacity, dependencies, model drift, cost, and potential data
 movement. Cerebro’s roadmap requires a retrieval evaluation before accepting those tradeoffs.
 
-## Write model
+## Write and promotion model
 
-The CLI scaffolds a brain and project partitions. Ongoing note changes are ordinary file edits
-reviewed and versioned through Git. The reusable reconciliation skill adds a strict after-work
-durable-value gate without granting itself remote publication authority.
+The CLI scaffolds a brain and project partitions. Ongoing authoritative changes flow through an
+exact structured proposal:
 
-The public v0.2 does not implement an opinionated publication command. Exact-path publication,
-remote same-path conflict detection, and protected control-plane updates are roadmap work and
-should not be inferred from the current CLI.
+```text
+clean Git task base
+        ↓
+candidate proposal
+        ↓
+source-bound ── compare evidence paths with task diff
+        │
+        └────── owner-accepted ── exact interactive confirmation
+        ↓
+atomic note write + whole-brain validation
+```
+
+For `source-bound`, task provenance covers committed changes since the base, staged changes,
+unstaged changes, and untracked files. If any evidence path appears in that union, automatic
+promotion refuses. Missing task metadata and dirty preflight states route to review.
+
+`owner-accepted` is a different trust mechanism, not a fallback an agent may silently choose. The
+CLI requires the owner to type the exact note ID. `proposal` never appears in current context.
+
+Cerebro reports an intended commit message but does not commit, push, configure remotes, or publish.
 
 ## Compatibility
 
@@ -95,6 +114,7 @@ The JSON surface is intended for agents and automation. It includes:
 - project identity;
 - generation time;
 - current/stale status;
+- authority class and promotion metadata;
 - whether history was included;
 - ordered documents;
 - explicit warnings.

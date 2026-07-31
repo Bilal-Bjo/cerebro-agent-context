@@ -12,6 +12,8 @@ Cerebro aims to:
 - reject common credential-shaped values in notes without echoing the value;
 - reject symlinked notes that could escape the expected tree;
 - fail closed when explicitly declared project-file evidence changes;
+- prevent automatic promotion from files the agent changed in the same task;
+- require exact interactive confirmation for owner-accepted authority;
 - keep every stored claim inspectable and versionable;
 - preserve source locators for revalidation.
 
@@ -74,7 +76,7 @@ If a secret enters history:
 5. Run independent current-tree and history scans.
 6. Replace old clones rather than casually pulling across rewritten history.
 
-The public v0.2 CLI does not automate history rewriting.
+The public v0.3 CLI does not automate history rewriting.
 
 ## File evidence
 
@@ -93,6 +95,28 @@ Evidence verification does not prove that a claim is semantically correct. It pr
 specific file bytes used when the claim was checked have not changed. Repositories used across
 operating systems should enforce a consistent line-ending policy in `.gitattributes`; otherwise an
 LF/CRLF checkout difference will intentionally produce a mismatch.
+
+## Task provenance and proposals
+
+`cerebro task init` records a clean base commit in Git's private metadata. During source-bound
+promotion, Cerebro compares every evidence path with committed changes since that base plus staged,
+unstaged, and untracked paths. Missing or invalid metadata, a non-ancestor base, or touched evidence
+prevents automatic promotion.
+
+This closes a specific back door: an agent cannot write a file and then cite that same output as
+independent proof. It does not prove that untouched source is correct or that the proposal's prose
+logically follows from it. Repository review, tests, and owning runtime evidence still outrank the
+note.
+
+Owner confirmation is intentionally interactive. Automation must not pipe, pre-fill, or bypass the
+exact-note-ID challenge.
+
+## Soak telemetry
+
+The optional soak recorder writes outside the brain to an owner-only state directory. It stores
+context outcomes and counts plus explicit owner ratings; it does not store prompt text, note
+contents, transcripts, reasoning, repository paths, or credentials. Missing ratings remain
+unrated. The file is local measurement data, not authority and not intended for Git.
 
 ## Prompt injection
 

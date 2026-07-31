@@ -1,9 +1,11 @@
 ---
-schema_version: 1
+schema_version: 2
 id: northstar-shop-state
 project: northstar-shop
 type: state
 status: current
+authority: source-bound
+promotion: {"accepted_at":"2026-01-15T00:00:00+00:00","base_commit":"4b3c2d1000000000000000000000000000000000","method":"task-provenance","task_id":"northstar-example-setup"}
 created: 2026-01-15
 updated: 2026-01-15
 last_verified: 2026-01-15

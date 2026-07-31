@@ -1,9 +1,11 @@
 ---
-schema_version: 1
+schema_version: 2
 id: northstar-shop-agent-map
 project: northstar-shop
 type: reference
 status: active
+authority: owner-accepted
+promotion: {"accepted_at":"2026-01-15T00:00:00+00:00","method":"interactive-owner-confirmation"}
 role: agent-map
 created: 2026-01-15
 updated: 2026-01-15

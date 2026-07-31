@@ -18,7 +18,7 @@ def score_run(
     answer = response.get("answer")
     source = response.get("source")
     answer_correct = answer == packet.expected.answer
-    source_correct = source in packet.expected.sources
+    source_correct = source in packet.expected.sources_for(condition)
     stale_adoption = answer in packet.expected.forbidden_answers
     if condition == "cerebro" and context is not None:
         context_status = context.status
