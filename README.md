@@ -365,7 +365,8 @@ cerebro context \
 
 Evidence paths must be normalized, project-relative regular files. Absolute paths, parent
 traversal, symlinks, missing files, malformed hashes, and mismatches fail closed. A note may declare
-at most eight checks.
+at most eight checks. Checks compare exact bytes; repositories shared across operating systems
+should declare a consistent text policy such as `* text=auto eol=lf` in `.gitattributes`.
 
 ### Provenance
 

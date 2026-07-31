@@ -90,7 +90,9 @@ It rejects:
 - extra fields that could be mistaken for executable instructions.
 
 Evidence verification does not prove that a claim is semantically correct. It proves only that the
-specific file bytes used when the claim was checked have not changed.
+specific file bytes used when the claim was checked have not changed. Repositories used across
+operating systems should enforce a consistent line-ending policy in `.gitattributes`; otherwise an
+LF/CRLF checkout difference will intentionally produce a mismatch.
 
 ## Prompt injection
 
