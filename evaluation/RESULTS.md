@@ -1,10 +1,15 @@
 # Initial evaluation results
 
-Date: 2026-07-31  
-Frozen harness commit: `a25b339`  
-Runner: Claude Code 2.1.220, `sonnet` alias, safe mode, tools disabled  
-Samples: 10 packets × 3 conditions × 3 independent processes = 90 runs  
-Completion: 90/90  
+Date: 2026-07-31
+
+Frozen harness commit: `a25b339`
+
+Runner: Claude Code 2.1.220, `sonnet` alias, safe mode, tools disabled
+
+Samples: 10 packets × 3 conditions × 3 independent processes = 90 runs
+
+Completion: 90/90
+
 Recorded model cost: $1.48
 
 An earlier nine-call exploratory pilot was used to correct cache-token accounting and strengthen the
