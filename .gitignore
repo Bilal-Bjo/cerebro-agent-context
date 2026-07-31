@@ -12,3 +12,4 @@ __pycache__/
 coverage.xml
 dist/
 build/
+evaluation/results/

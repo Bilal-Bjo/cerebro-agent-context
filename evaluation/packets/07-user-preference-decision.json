@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "id": "user-preference-decision",
+  "title": "Durable product preference",
+  "task": "Which navigation density should the settings screen use?",
+  "answer_options": ["compact", "comfortable", "insufficient"],
+  "repository_files": {
+    "src/settings/navigation.ts": "export type Density = 'compact' | 'comfortable'\n",
+    "docs/design.md": "Both navigation density modes are supported.\n"
+  },
+  "agents_context": "Use comfortable density because it is the conventional default.",
+  "cerebro": {
+    "state": {
+      "summary": "The settings navigation still supports both density modes.",
+      "body": "Apply the accepted user preference when choosing the default navigation density."
+    },
+    "agent_map": {
+      "summary": "Read accepted interface preference decisions for settings work.",
+      "body": "Settings navigation density is governed by the accepted preference decision."
+    },
+    "notes": [
+      {
+        "id": "settings-density",
+        "type": "decision",
+        "summary": "Use compact navigation density on the settings screen.",
+        "body": "The accepted user preference is compact navigation density for the settings screen."
+      }
+    ]
+  },
+  "expected": {
+    "answer": "compact",
+    "sources": ["cerebro:settings-density"],
+    "forbidden_answers": ["comfortable"],
+    "cerebro_status": "current",
+    "block_relevant": false
+  }
+}

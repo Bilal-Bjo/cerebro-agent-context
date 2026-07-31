@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "id": "semantic-hash-trap",
+  "title": "Valid hash, wrong claim",
+  "task": "Which provider currently hosts the production web service?",
+  "answer_options": ["fly", "render", "insufficient"],
+  "repository_files": {
+    "config/default-provider.txt": "render\n",
+    "ops/live-status.json": "{\"environment\":\"production\",\"provider\":\"fly\",\"checked_at\":\"2026-07-31T08:00:00Z\"}\n"
+  },
+  "agents_context": "Production is hosted on Render according to the original setup.",
+  "cerebro": {
+    "state": {
+      "summary": "Production is hosted on Render.",
+      "body": "The production web service currently runs on Render.",
+      "verification": [
+        {
+          "path": "config/default-provider.txt",
+          "sha256_of": "render\n"
+        }
+      ]
+    },
+    "agent_map": {
+      "summary": "Use the live operations status for current hosting questions.",
+      "body": "Current production provider questions should be checked against ops/live-status.json."
+    }
+  },
+  "expected": {
+    "answer": "fly",
+    "sources": ["ops/live-status.json"],
+    "forbidden_answers": ["render"],
+    "cerebro_status": "current",
+    "block_relevant": false
+  }
+}

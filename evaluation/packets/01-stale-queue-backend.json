@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "id": "stale-queue-backend",
+  "title": "Stale queue backend",
+  "task": "Which queue backend should new worker code use?",
+  "answer_options": ["river", "redis", "insufficient"],
+  "repository_files": {
+    "config/queue.toml": "backend = \"river\"\n",
+    "src/worker.py": "from app.queue import river\n"
+  },
+  "agents_context": "The worker queue uses Redis. New workers should enqueue Redis jobs.",
+  "cerebro": {
+    "state": {
+      "summary": "The worker queue uses Redis.",
+      "body": "New worker code should use the Redis queue backend.",
+      "verification": [
+        {
+          "path": "config/queue.toml",
+          "sha256_of": "backend = \"redis\"\n"
+        }
+      ]
+    },
+    "agent_map": {
+      "summary": "Use the repository queue configuration for worker tasks.",
+      "body": "For queue backend work, inspect config/queue.toml before changing workers."
+    }
+  },
+  "expected": {
+    "answer": "river",
+    "sources": ["config/queue.toml"],
+    "forbidden_answers": ["redis"],
+    "cerebro_status": "blocked",
+    "block_relevant": true
+  }
+}

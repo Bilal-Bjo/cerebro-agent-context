@@ -15,13 +15,17 @@
 
 ## TL;DR
 
-**Cerebro gives your coding agent a trustworthy memory between sessions.** It keeps project state,
-decisions, and rules in local Markdown, tracks every change with Git, and refuses stale context
-instead of feeding it to the agent. It works with Codex, Claude Code, and any agent that can run a
-command—no vector database or transcript dumping required.
+**Cerebro is a strict, Git-backed project memory for coding agents.** It keeps project state,
+decisions, and rules in local Markdown, makes age and evidence failures visible, and keeps history
+out of current context by default. The engineering is tested; the workflow benefit is still being
+measured against repository-only and `AGENTS.md` baselines.
 
 **Want it?** Open a project and paste the
 [setup prompt](prompts/setup-cerebro.md) into your coding agent.
+
+**Want the proof instead of the pitch?** Read the
+[evaluation harness](evaluation/README.md). Its scenarios deliberately include cases Cerebro v0.2
+handles well and cases where it fails.
 
 **What changed in v0.2?** Cerebro now closes the loop: an agent can check current memory before
 work, decide after work whether anything is genuinely worth remembering, and bind important claims
@@ -575,8 +579,9 @@ verifying claims against their owning sources.
 Cerebro is an alpha release extracted as a clean public implementation from a privately proven
 workflow. The public repository uses fresh Git history and completely synthetic examples.
 
-The v0.2 acceptance surface is covered by automated tests, but long-term cross-platform and
-multi-user use still needs real-world soak.
+The v0.2 acceptance surface is covered by automated tests. Its context benefit is not yet proven:
+the repository now includes a repeatable three-condition evaluation, and long-term workflow value
+still needs real-world soak.
 
 ### Roadmap
 
@@ -584,7 +589,7 @@ multi-user use still needs real-world soak.
 - Exact-path Git publication with conflict detection.
 - Pluggable project resolvers for Git remotes and monorepos.
 - Optional MCP server exposing read-only context tools.
-- Retrieval evaluation harness before any vector-search backend.
+- Run and publish the retrieval evaluation before any trust-model or vector-search expansion.
 - Signed release artifacts and PyPI publishing.
 - Expanded Windows path and terminal testing.
 

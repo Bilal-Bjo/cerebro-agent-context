@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "id": "duplicated-version",
+  "title": "Duplicated version drift",
+  "task": "What version is the package currently releasing?",
+  "answer_options": ["2.4.0", "2.3.0", "insufficient"],
+  "repository_files": {
+    "pyproject.toml": "[project]\nname = \"example\"\nversion = \"2.4.0\"\n",
+    "src/example/__init__.py": "__version__ = \"2.4.0\"\n"
+  },
+  "agents_context": "The current release line is 2.3.0.",
+  "cerebro": {
+    "state": {
+      "summary": "The current release line is 2.3.0.",
+      "body": "Package release work should target version 2.3.0."
+    },
+    "agent_map": {
+      "summary": "Package metadata is the authority for release version questions.",
+      "body": "Inspect pyproject.toml before release work."
+    }
+  },
+  "expected": {
+    "answer": "2.4.0",
+    "sources": ["pyproject.toml", "src/example/__init__.py"],
+    "forbidden_answers": ["2.3.0"],
+    "cerebro_status": "current",
+    "block_relevant": false
+  }
+}
