@@ -84,6 +84,11 @@ def build_parser() -> argparse.ArgumentParser:
     context.add_argument("--history", action="store_true", help="Include labelled historical evidence")
     context.add_argument("--include-stale", action="store_true")
     context.add_argument("--require-fresh", action="store_true")
+    context.add_argument(
+        "--verify-evidence",
+        action="store_true",
+        help="Verify declared project-file SHA-256 checks",
+    )
     context.add_argument("--restricted", action="store_true")
     context.add_argument("--json", action="store_true")
 
@@ -102,6 +107,17 @@ def build_parser() -> argparse.ArgumentParser:
     show.add_argument("--allow-stale", action="store_true")
     show.add_argument("--restricted", action="store_true")
     show.add_argument("--json", action="store_true")
+
+    evidence = sub.add_parser("evidence", help="Create deterministic evidence checks")
+    _add_brain(evidence)
+    evidence_sub = evidence.add_subparsers(dest="evidence_command", required=True)
+    evidence_hash = evidence_sub.add_parser(
+        "hash",
+        help="Hash one project-relative regular file",
+    )
+    evidence_hash.add_argument("--cwd", type=Path, default=Path.cwd())
+    evidence_hash.add_argument("--path", required=True)
+    evidence_hash.add_argument("--json", action="store_true")
     return parser
 
 
@@ -132,6 +148,13 @@ def run(args: argparse.Namespace) -> int:
     if args.command == "resolve":
         project = brain.resolve(args.cwd)
         _emit({"id": project.id, "name": project.name, "path": str(project.path)}, args.json)
+        return 0
+    if args.command == "evidence":
+        if args.evidence_command != "hash":
+            raise CerebroError(f"unsupported evidence command '{args.evidence_command}'")
+        project = brain.resolve(args.cwd)
+        payload = {"verification": brain.hash_evidence(project, args.cwd, args.path)}
+        _emit(payload, args.json)
         return 0
     if args.command == "validate":
         issues = brain.validate()
@@ -174,6 +197,8 @@ def run(args: argparse.Namespace) -> int:
             include_stale=args.include_stale,
             require_fresh=args.require_fresh,
             restricted=args.restricted,
+            verify_evidence=args.verify_evidence,
+            cwd=args.cwd,
         )
         _emit(payload, args.json)
         return 0

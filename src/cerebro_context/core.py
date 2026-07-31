@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -9,7 +10,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 SENSITIVITIES = {"public", "internal", "restricted"}
@@ -51,6 +52,8 @@ SECRET_PATTERNS = [
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),
     re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
 ]
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+MAX_VERIFICATION_CHECKS = 8
 
 
 class CerebroError(Exception):
@@ -215,6 +218,66 @@ def scan_secrets(note: Note) -> list[Issue]:
     return issues
 
 
+def _safe_evidence_path(raw_path: Any) -> str | None:
+    if not isinstance(raw_path, str) or not raw_path or "\\" in raw_path:
+        return None
+    candidate = Path(raw_path)
+    if candidate.is_absolute() or raw_path.startswith("~") or ".." in candidate.parts:
+        return None
+    normalized = candidate.as_posix()
+    if normalized in {"", "."} or normalized.startswith("./"):
+        return None
+    return normalized
+
+
+def validate_verification(note: Note) -> list[Issue]:
+    checks = note.metadata.get("verification")
+    if checks is None:
+        return []
+    if (
+        not isinstance(checks, list)
+        or not checks
+        or len(checks) > MAX_VERIFICATION_CHECKS
+    ):
+        return [
+            Issue(
+                str(note.path),
+                f"verification must contain 1..{MAX_VERIFICATION_CHECKS} checks",
+            )
+        ]
+
+    issues: list[Issue] = []
+    for index, check in enumerate(checks):
+        label = f"verification[{index}]"
+        if not isinstance(check, dict):
+            issues.append(Issue(str(note.path), f"{label} must be an object"))
+            continue
+        expected_keys = {"kind", "path", "sha256"}
+        if set(check) != expected_keys:
+            issues.append(
+                Issue(
+                    str(note.path),
+                    f"{label} must contain exactly kind, path, and sha256",
+                )
+            )
+            continue
+        if check.get("kind") != "file-sha256":
+            issues.append(Issue(str(note.path), f"{label}.kind must be file-sha256"))
+        if _safe_evidence_path(check.get("path")) is None:
+            issues.append(
+                Issue(
+                    str(note.path),
+                    f"{label}.path must be a normalized project-relative file path",
+                )
+            )
+        digest = check.get("sha256")
+        if not isinstance(digest, str) or not SHA256_RE.fullmatch(digest):
+            issues.append(
+                Issue(str(note.path), f"{label}.sha256 must be a lowercase SHA-256 digest")
+            )
+    return issues
+
+
 def validate_note(note: Note, expected_project: str) -> list[Issue]:
     issues: list[Issue] = []
     missing = sorted(REQUIRED_NOTE_FIELDS - note.metadata.keys())
@@ -261,6 +324,7 @@ def validate_note(note: Note, expected_project: str) -> list[Issue]:
             issues.append(Issue(str(note.path), "source URLs must not contain credentials"))
 
     issues.extend(scan_secrets(note))
+    issues.extend(validate_verification(note))
     return issues
 
 
@@ -385,6 +449,106 @@ class Brain:
             raise CerebroError(f"multiple Cerebro projects resolve for {target}")
         return candidates[0][1]
 
+    def project_root(self, project: Project, cwd: Path) -> Path:
+        target = cwd.expanduser().resolve()
+        candidates: list[Path] = []
+        for raw_root in project.roots:
+            root = Path(raw_root).expanduser()
+            if not root.is_absolute():
+                root = self.root / root
+            root = root.resolve()
+            try:
+                target.relative_to(root)
+            except ValueError:
+                continue
+            candidates.append(root)
+        if not candidates:
+            raise CerebroError(
+                f"{target} is outside the registered roots for project '{project.id}'"
+            )
+        candidates.sort(key=lambda item: len(item.parts), reverse=True)
+        if len(candidates) > 1 and len(candidates[0].parts) == len(candidates[1].parts):
+            raise CerebroError(f"multiple roots for project '{project.id}' match {target}")
+        return candidates[0]
+
+    @staticmethod
+    def _evidence_file(project_root: Path, raw_path: Any) -> Path:
+        safe_path = _safe_evidence_path(raw_path)
+        if safe_path is None:
+            raise CerebroError("evidence path must be a normalized project-relative file path")
+        candidate = project_root / safe_path
+        cursor = project_root
+        for part in Path(safe_path).parts:
+            cursor /= part
+            if cursor.is_symlink():
+                raise CerebroError(f"evidence path contains a symlink: {safe_path}")
+        resolved = candidate.resolve()
+        try:
+            resolved.relative_to(project_root.resolve())
+        except ValueError as exc:
+            raise CerebroError(f"evidence path escapes the project root: {safe_path}") from exc
+        if not resolved.is_file():
+            raise CerebroError(f"evidence path is not a regular file: {safe_path}")
+        return resolved
+
+    @staticmethod
+    def _sha256_file(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def hash_evidence(self, project: Project, cwd: Path, path: str) -> dict[str, str]:
+        root = self.project_root(project, cwd)
+        evidence_file = self._evidence_file(root, path)
+        return {
+            "kind": "file-sha256",
+            "path": evidence_file.relative_to(root).as_posix(),
+            "sha256": self._sha256_file(evidence_file),
+        }
+
+    def verify_evidence(
+        self,
+        project: Project,
+        cwd: Path,
+        notes: Iterable[Note],
+    ) -> dict[str, Any]:
+        root = self.project_root(project, cwd)
+        failures: list[dict[str, str]] = []
+        checks = 0
+        for note in notes:
+            raw_checks = note.metadata.get("verification", [])
+            if not isinstance(raw_checks, list):
+                continue
+            for check in raw_checks:
+                if not isinstance(check, dict) or check.get("kind") != "file-sha256":
+                    continue
+                checks += 1
+                path = str(check.get("path", ""))
+                expected = str(check.get("sha256", ""))
+                try:
+                    evidence_file = self._evidence_file(root, path)
+                    actual = self._sha256_file(evidence_file)
+                except CerebroError as exc:
+                    failures.append(
+                        {"note": note.id, "path": path, "reason": str(exc)}
+                    )
+                    continue
+                if actual != expected:
+                    failures.append(
+                        {
+                            "note": note.id,
+                            "path": path,
+                            "reason": "SHA-256 mismatch",
+                        }
+                    )
+        return {
+            "status": "failed" if failures else "passed",
+            "checks": checks,
+            "failures": failures,
+        }
+
     def current_notes(self, project: Project) -> list[Note]:
         notes: list[Note] = []
         for path in sorted(project.path.rglob("*.md")):
@@ -463,10 +627,40 @@ class Brain:
         include_stale: bool = False,
         require_fresh: bool = False,
         restricted: bool = False,
+        verify_evidence: bool = False,
+        cwd: Path | None = None,
     ) -> dict[str, Any]:
         if project.sensitivity == "restricted" and not restricted:
             raise CerebroError("restricted project requires --restricted")
         all_candidates = self.current_notes(project)
+        validation_issues: list[Issue] = []
+        ids: set[str] = set()
+        state_count = 0
+        map_count = 0
+        for note in all_candidates:
+            validation_issues.extend(validate_note(note, project.id))
+            if note.id in ids:
+                validation_issues.append(
+                    Issue(str(note.path), f"duplicate note id in project: {note.id}")
+                )
+            ids.add(note.id)
+            if note.note_type == "state" and note.status == "current":
+                state_count += 1
+            if note.note_type == "reference" and note.metadata.get("role") == "agent-map":
+                map_count += 1
+        if state_count != 1:
+            validation_issues.append(
+                Issue(str(project.path), "project must have exactly one current state note")
+            )
+        if map_count != 1:
+            validation_issues.append(
+                Issue(str(project.path), "project must have exactly one agent-map reference")
+            )
+        if validation_issues:
+            first = validation_issues[0].render()
+            remaining = len(validation_issues) - 1
+            suffix = f" (+{remaining} more)" if remaining else ""
+            raise CerebroError(f"project validation failed: {first}{suffix}")
         unauthorized_authority = [
             note
             for note in all_candidates
@@ -488,6 +682,36 @@ class Brain:
         if require_fresh and stale_authority:
             names = ", ".join(note.id for note, _ in stale_authority)
             raise CerebroError(f"current authority is stale: {names}", exit_code=3)
+
+        authority = [
+            note
+            for note in candidates
+            if note.status in CURRENT_STATUSES.get(note.note_type, set())
+            and self.stale_reason(note) is None
+        ]
+        declared_evidence = sum(
+            len(note.metadata.get("verification", []))
+            for note in authority
+            if isinstance(note.metadata.get("verification", []), list)
+        )
+        if verify_evidence:
+            if cwd is None:
+                raise CerebroError("--verify-evidence requires a working directory")
+            evidence = self.verify_evidence(project, cwd, authority)
+            if evidence["failures"]:
+                names = ", ".join(
+                    f"{item['note']}:{item['path']}" for item in evidence["failures"]
+                )
+                raise CerebroError(
+                    f"current authority evidence failed: {names}",
+                    exit_code=3,
+                )
+        else:
+            evidence = {
+                "status": "not_checked" if declared_evidence else "not_declared",
+                "checks": declared_evidence,
+                "failures": [],
+            }
 
         visible = []
         for note in candidates:
@@ -530,6 +754,7 @@ class Brain:
             ),
             "history_included": include_history,
             "documents": documents,
+            "evidence": evidence,
             "warnings": (
                 [
                     {
@@ -538,6 +763,16 @@ class Brain:
                     }
                 ]
                 if unauthorized_authority
+                else []
+            )
+            + (
+                [
+                    {
+                        "reason": "executable evidence was not checked",
+                        "count": declared_evidence,
+                    }
+                ]
+                if declared_evidence and not verify_evidence
                 else []
             )
             + [

@@ -11,6 +11,7 @@ Cerebro aims to:
 - prevent restricted notes from appearing without explicit opt-in;
 - reject common credential-shaped values in notes without echoing the value;
 - reject symlinked notes that could escape the expected tree;
+- fail closed when explicitly declared project-file evidence changes;
 - keep every stored claim inspectable and versionable;
 - preserve source locators for revalidation.
 
@@ -73,7 +74,25 @@ If a secret enters history:
 5. Run independent current-tree and history scans.
 6. Replace old clones rather than casually pulling across rewritten history.
 
-The public v0.1 CLI does not automate history rewriting.
+The public v0.2 CLI does not automate history rewriting.
+
+## File evidence
+
+`file-sha256` checks are data, not shell commands. Cerebro only reads a normalized,
+project-relative regular file beneath the registered checkout and compares its SHA-256 digest.
+
+It rejects:
+
+- absolute paths and parent traversal;
+- symlinks and non-files;
+- malformed or uppercase digests;
+- more than eight checks on one note;
+- extra fields that could be mistaken for executable instructions.
+
+Evidence verification does not prove that a claim is semantically correct. It proves only that the
+specific file bytes used when the claim was checked have not changed. Repositories used across
+operating systems should enforce a consistent line-ending policy in `.gitattributes`; otherwise an
+LF/CRLF checkout difference will intentionally produce a mismatch.
 
 ## Prompt injection
 

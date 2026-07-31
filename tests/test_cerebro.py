@@ -43,6 +43,17 @@ class CerebroExampleTests(unittest.TestCase):
         self.assertNotIn("old-queue-evaluation", ids)
         self.assertEqual(payload["status"], "current")
 
+    def test_example_file_evidence_passes(self) -> None:
+        payload = self.brain.context(
+            self.brain.project("northstar-shop"),
+            require_fresh=True,
+            verify_evidence=True,
+            cwd=EXAMPLE_WORKSPACE,
+        )
+        self.assertEqual(payload["evidence"]["status"], "passed")
+        self.assertEqual(payload["evidence"]["checks"], 1)
+        self.assertEqual(payload["evidence"]["failures"], [])
+
     def test_stale_note_requires_explicit_opt_in(self) -> None:
         hidden = self.brain.search("intentionally stale")
         visible = self.brain.search("intentionally stale", include_stale=True)
@@ -217,6 +228,125 @@ class CerebroTemporaryBrainTests(unittest.TestCase):
         with self.assertRaises(CerebroError) as caught:
             Brain(self.root).projects()
         self.assertIn("duplicate JSON key", str(caught.exception))
+
+    def test_file_evidence_detects_source_change(self) -> None:
+        source = self.workspace / "project.txt"
+        source.write_text("current source\n")
+        brain = Brain(self.root)
+        check = brain.hash_evidence(
+            brain.project("example-project"),
+            self.workspace,
+            "project.txt",
+        )
+        state_path = self.project_path / "State.md"
+        state_path.write_text(
+            state_path.read_text().replace(
+                'sources: ["repo://current"]\n',
+                'sources: ["repo://current"]\n'
+                f"verification: {json.dumps([check], separators=(',', ':'))}\n",
+            )
+        )
+
+        current = Brain(self.root).context(
+            Brain(self.root).project("example-project"),
+            require_fresh=True,
+            verify_evidence=True,
+            cwd=self.workspace,
+        )
+        self.assertEqual(current["evidence"]["status"], "passed")
+
+        source.write_text("changed source\n")
+        changed_brain = Brain(self.root)
+        with self.assertRaises(CerebroError) as caught:
+            changed_brain.context(
+                changed_brain.project("example-project"),
+                require_fresh=True,
+                verify_evidence=True,
+                cwd=self.workspace,
+            )
+        self.assertEqual(caught.exception.exit_code, 3)
+        self.assertIn("example-project-state:project.txt", str(caught.exception))
+
+    def test_evidence_hash_cli_emits_bounded_verification_object(self) -> None:
+        source = self.workspace / "project.txt"
+        source.write_text("source\n")
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = main(
+                [
+                    "evidence",
+                    "--brain",
+                    str(self.root),
+                    "hash",
+                    "--cwd",
+                    str(self.workspace),
+                    "--path",
+                    "project.txt",
+                    "--json",
+                ]
+            )
+        self.assertEqual(code, 0)
+        verification = json.loads(stdout.getvalue())["verification"]
+        self.assertEqual(verification["kind"], "file-sha256")
+        self.assertEqual(verification["path"], "project.txt")
+        self.assertRegex(verification["sha256"], r"^[0-9a-f]{64}$")
+
+    def test_evidence_path_traversal_is_rejected(self) -> None:
+        state_path = self.project_path / "State.md"
+        invalid = {
+            "kind": "file-sha256",
+            "path": "../outside.txt",
+            "sha256": "0" * 64,
+        }
+        state_path.write_text(
+            state_path.read_text().replace(
+                'sources: ["repo://current"]\n',
+                'sources: ["repo://current"]\n'
+                f"verification: {json.dumps([invalid], separators=(',', ':'))}\n",
+            )
+        )
+        issues = Brain(self.root).validate()
+        self.assertTrue(
+            any("normalized project-relative file path" in issue.message for issue in issues)
+        )
+
+    def test_context_rejects_malformed_evidence_without_separate_validation(self) -> None:
+        state_path = self.project_path / "State.md"
+        invalid = {
+            "kind": "file-sha256",
+            "path": "project.txt",
+            "sha256": "0" * 64,
+            "command": "never execute note data",
+        }
+        state_path.write_text(
+            state_path.read_text().replace(
+                'sources: ["repo://current"]\n',
+                'sources: ["repo://current"]\n'
+                f"verification: {json.dumps([invalid], separators=(',', ':'))}\n",
+            )
+        )
+        brain = Brain(self.root)
+        with self.assertRaises(CerebroError) as caught:
+            brain.context(
+                brain.project("example-project"),
+                require_fresh=True,
+                verify_evidence=True,
+                cwd=self.workspace,
+            )
+        self.assertIn("project validation failed", str(caught.exception))
+        self.assertIn("exactly kind, path, and sha256", str(caught.exception))
+
+
+class PublicWorkflowAssetTests(unittest.TestCase):
+    def test_reconciliation_assets_keep_remote_and_secret_boundaries(self) -> None:
+        skill = (ROOT / "skills" / "cerebro-reconcile" / "SKILL.md").read_text()
+        prompt = (ROOT / "prompts" / "reconcile-cerebro.md").read_text()
+        combined = f"{skill}\n{prompt}".casefold()
+        self.assertIn("durable-value gate", combined)
+        self.assertIn("make no cerebro change", combined)
+        self.assertIn("do not create a remote", combined)
+        self.assertIn("credentials", combined)
+        self.assertIn("--verify-evidence", combined)
 
 
 if __name__ == "__main__":
