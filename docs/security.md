@@ -13,6 +13,8 @@ Cerebro aims to:
 - reject symlinked notes that could escape the expected tree;
 - fail closed when explicitly declared project-file evidence changes;
 - prevent automatic promotion from files the agent changed in the same task;
+- constrain autonomous agent learning to internal runbooks, agent-process incidents, and research
+  with task and audit provenance;
 - require exact interactive confirmation for owner-accepted authority;
 - keep every stored claim inspectable and versionable;
 - preserve source locators for revalidation.
@@ -108,8 +110,14 @@ independent proof. It does not prove that untouched source is correct or that th
 logically follows from it. Repository review, tests, and owning runtime evidence still outrank the
 note.
 
-Owner confirmation is intentionally interactive. Automation must not pipe, pre-fill, or bypass the
-exact-note-ID challenge.
+Agent-owned promotion intentionally requires no owner confirmation. Its security boundary is
+structural: internal sensitivity, a runbook/incident/research target, `agent-learning`,
+`audit://agent/...` provenance, no supersedes, no executable evidence, a recorded task base, and no
+replacement of stronger authority. This does not make the agent's prose true; it makes ordinary
+operational learning auditable and prevents it from impersonating source or owner authority.
+
+Owner confirmation remains intentionally interactive only when a note claims owner authority.
+Automation must not pipe, pre-fill, or bypass the exact-note-ID challenge.
 
 ## Soak telemetry
 
@@ -126,7 +134,8 @@ inside a note even when the frontmatter is valid.
 Mitigations:
 
 - restrict who can write the brain;
-- require human review for changes;
+- review source-bound and owner-accepted changes through their owning workflows; keep agent-owned
+  notes within their narrow schema and inspect their Git history;
 - keep current authority concise;
 - preserve repository and runtime evidence as higher authority;
 - do not grant tools merely because a note asks for them;

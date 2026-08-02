@@ -22,7 +22,9 @@ Before every task:
 7. Never write credentials, cookies, sessions, private keys, customer data, or transcripts to the
    brain.
 8. After nontrivial work, use the `cerebro-reconcile` skill or reconciliation prompt. Submit
-   structured proposals; never grant note authority by editing frontmatter directly.
+   structured proposals. Use bounded `agent-owned` authority for ordinary agent learning and
+   reserve `owner-accepted` for actual owner decisions; never grant note authority by editing
+   frontmatter directly.
 ```
 
 The exact Git update command belongs to your environment. Do not place a token in the instruction
@@ -99,7 +101,9 @@ Both paths apply the same gate:
 - remember only durable facts that will change a future action;
 - bind important claims to small project files only when task provenance proves the agent did not
   change those files;
-- require exact interactive owner confirmation for durable decisions;
+- publish bounded internal agent-process lessons automatically as `agent-owned`;
+- require exact interactive owner confirmation only for claims that represent the owner's
+  decisions or commitments;
 - validate and inspect the exact diff;
 - do nothing when no claim passes the gate;
 - never push or change remote policy automatically.

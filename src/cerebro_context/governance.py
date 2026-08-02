@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from .core import (
+    AGENT_OWNED_TARGET_PREFIXES,
+    AGENT_OWNED_TYPES,
     CURRENT_STATUSES,
     SENSITIVITIES,
     Brain,
@@ -39,7 +41,7 @@ PROPOSAL_FIELDS = {
     "requested_authority",
     "evidence_paths",
 }
-REQUESTED_AUTHORITIES = {"owner-accepted", "source-bound"}
+REQUESTED_AUTHORITIES = {"agent-owned", "owner-accepted", "source-bound"}
 TARGET_PREFIXES = {"decisions", "runbooks", "incidents", "research"}
 DEFAULT_CURRENT_STATUS = {
     "state": "current",
@@ -226,6 +228,26 @@ def assess_source_provenance(cwd: Path, evidence_paths: list[str]) -> dict[str, 
     }
 
 
+def assess_agent_provenance(cwd: Path) -> dict[str, Any]:
+    task = load_task(cwd)
+    if task is None:
+        return {
+            "eligible": False,
+            "reason": "missing task metadata",
+            "task_id": None,
+            "base_commit": None,
+            "touched_evidence": [],
+        }
+    _changed_paths(task.repository_root, task)
+    return {
+        "eligible": True,
+        "reason": "bounded agent reconciliation",
+        "task_id": task.task_id,
+        "base_commit": task.base_commit,
+        "touched_evidence": [],
+    }
+
+
 def load_proposal(path: Path) -> dict[str, Any]:
     if path.is_symlink() or not path.is_file():
         raise CerebroError(f"{path}: proposal must be a regular JSON file")
@@ -259,7 +281,29 @@ def load_proposal(path: Path) -> dict[str, Any]:
         raise CerebroError(f"{path}: requested_authority is invalid")
     if payload["requested_authority"] == "source-bound" and not payload["evidence_paths"]:
         raise CerebroError(f"{path}: source-bound proposals require evidence_paths")
-    _safe_target(payload["target"])
+    if payload["requested_authority"] == "agent-owned":
+        if payload["type"] not in AGENT_OWNED_TYPES:
+            raise CerebroError(
+                f"{path}: agent-owned proposals are limited to runbook, incident, or research"
+            )
+        if payload["sensitivity"] != "internal":
+            raise CerebroError(f"{path}: agent-owned proposals must be internal")
+        if payload["evidence_paths"]:
+            raise CerebroError(f"{path}: agent-owned proposals cannot declare evidence_paths")
+        if payload["supersedes"]:
+            raise CerebroError(f"{path}: agent-owned proposals cannot supersede notes")
+        if "agent-learning" not in payload["tags"]:
+            raise CerebroError(f"{path}: agent-owned proposals require agent-learning tag")
+        if not any(source.startswith("audit://agent/") for source in payload["sources"]):
+            raise CerebroError(f"{path}: agent-owned proposals require audit://agent provenance")
+    target = _safe_target(payload["target"])
+    if payload["requested_authority"] == "agent-owned":
+        expected_parent = AGENT_OWNED_TARGET_PREFIXES[payload["type"]]
+        if target.parent != Path(expected_parent):
+            raise CerebroError(
+                f"{path}: agent-owned {payload['type']} targets must be directly under "
+                f"{expected_parent}/"
+            )
     return payload
 
 
@@ -283,6 +327,9 @@ def check_proposal(brain: Brain, cwd: Path, path: Path) -> dict[str, Any]:
     requested = str(proposal["requested_authority"])
     if requested == "source-bound":
         provenance = assess_source_provenance(cwd, list(proposal["evidence_paths"]))
+        eligible = bool(provenance["eligible"])
+    elif requested == "agent-owned":
+        provenance = assess_agent_provenance(cwd)
         eligible = bool(provenance["eligible"])
     else:
         provenance = {
@@ -322,20 +369,28 @@ def _render_note(
         else datetime.now(UTC).date().isoformat()
     )
     today = datetime.now(UTC).date().isoformat()
-    if authority == "source-bound":
+    if authority in {"agent-owned", "source-bound"}:
         task = load_task(cwd)
         if task is None:
-            raise CerebroError("source-bound promotion requires task metadata")
+            raise CerebroError(f"{authority} promotion requires task metadata")
         promotion: dict[str, str] = {
-            "method": "task-provenance",
+            "method": (
+                "agent-reconciliation"
+                if authority == "agent-owned"
+                else "task-provenance"
+            ),
             "accepted_at": accepted_at,
             "task_id": task.task_id,
             "base_commit": task.base_commit,
         }
-        verification = [
-            brain.hash_evidence(project, cwd, path)
-            for path in proposal["evidence_paths"]
-        ]
+        verification = (
+            [
+                brain.hash_evidence(project, cwd, path)
+                for path in proposal["evidence_paths"]
+            ]
+            if authority == "source-bound"
+            else []
+        )
     else:
         promotion = {
             "method": "interactive-owner-confirmation",
@@ -400,6 +455,13 @@ def apply_proposal(
                 f"source-bound promotion requires review: {provenance['reason']}",
                 exit_code=3,
             )
+    elif authority == "agent-owned":
+        provenance = assess_agent_provenance(cwd)
+        if not provenance["eligible"]:
+            raise CerebroError(
+                f"agent-owned promotion requires review: {provenance['reason']}",
+                exit_code=3,
+            )
     else:
         typed = input_fn(
             f"Type {proposal['id']} to confirm owner acceptance; anything else cancels: "
@@ -424,6 +486,10 @@ def apply_proposal(
             raise CerebroError("proposal target must be a regular file")
         previous = target.read_bytes()
         existing = parse_frontmatter(target)
+        if authority == "agent-owned" and existing.authority != "agent-owned":
+            raise CerebroError(
+                "agent-owned proposal cannot replace stronger or legacy authority"
+            )
         if (
             existing.id != proposal["id"]
             or existing.project != proposal["project"]

@@ -379,6 +379,7 @@ class CerebroTemporaryBrainTests(unittest.TestCase):
 
     def _proposal(self, authority: str = "source-bound") -> Path:
         proposal = Path(self.temp.name) / f"{authority}.json"
+        agent_owned = authority == "agent-owned"
         proposal.write_text(
             json.dumps(
                 {
@@ -388,8 +389,12 @@ class CerebroTemporaryBrainTests(unittest.TestCase):
                     "type": "research",
                     "target": f"research/{authority}-fact.md",
                     "sensitivity": "internal",
-                    "sources": ["repo://example/project.txt"],
-                    "tags": ["test"],
+                    "sources": (
+                        ["audit://agent/test-reconciliation"]
+                        if agent_owned
+                        else ["repo://example/project.txt"]
+                    ),
+                    "tags": ["test", *(["agent-learning"] if agent_owned else [])],
                     "supersedes": [],
                     "summary": "A bounded test fact.",
                     "read_when": "Read only in tests.",
@@ -403,6 +408,93 @@ class CerebroTemporaryBrainTests(unittest.TestCase):
             )
         )
         return proposal
+
+    def test_agent_owned_proposal_applies_without_owner_input(self) -> None:
+        self._init_workspace_git()
+        init_task(self.workspace, "agent-learning")
+        proposal = self._proposal("agent-owned")
+        checked = check_proposal(Brain(self.root), self.workspace, proposal)
+        self.assertTrue(checked["automatic_promotion_eligible"])
+        self.assertEqual(checked["provenance"]["reason"], "bounded agent reconciliation")
+
+        def owner_input_would_be_a_bug(_: str) -> str:
+            raise AssertionError("agent-owned promotion must not ask the owner")
+
+        applied = apply_proposal(
+            Brain(self.root),
+            self.workspace,
+            proposal,
+            input_fn=owner_input_would_be_a_bug,
+        )
+        self.assertEqual(applied["authority"], "agent-owned")
+        note = Brain(self.root).show("agent-owned-fact")
+        self.assertEqual(note["authority"], "agent-owned")
+        rendered = (
+            self.root / "projects/example-project/research/agent-owned-fact.md"
+        ).read_text()
+        self.assertIn('"method":"agent-reconciliation"', rendered)
+        payload = json.loads(proposal.read_text())
+        payload["body"] = "The corrected operational lesson remains bounded."
+        proposal.write_text(json.dumps(payload))
+        reapplied = apply_proposal(
+            Brain(self.root),
+            self.workspace,
+            proposal,
+            input_fn=owner_input_would_be_a_bug,
+        )
+        self.assertEqual(reapplied["authority"], "agent-owned")
+        self.assertIn(
+            "corrected operational lesson",
+            Brain(self.root).show("agent-owned-fact")["content"],
+        )
+
+    def test_agent_owned_proposal_is_bounded(self) -> None:
+        self._init_workspace_git()
+        init_task(self.workspace, "agent-learning")
+        proposal = self._proposal("agent-owned")
+        original = json.loads(proposal.read_text())
+        cases = [
+            (
+                {"type": "decision", "target": "decisions/agent-owned-fact.md"},
+                "limited to runbook, incident, or research",
+            ),
+            ({"sensitivity": "public"}, "must be internal"),
+            ({"evidence_paths": ["project.txt"]}, "cannot declare evidence_paths"),
+            ({"supersedes": ["older-note"]}, "cannot supersede notes"),
+            ({"tags": ["test"]}, "require agent-learning"),
+            ({"sources": ["repo://example/project.txt"]}, "audit://agent provenance"),
+            (
+                {"target": "research/nested/agent-owned-fact.md"},
+                "must be directly under research/",
+            ),
+        ]
+        for updates, message in cases:
+            with self.subTest(updates=updates):
+                payload = {**original, **updates}
+                proposal.write_text(json.dumps(payload))
+                with self.assertRaisesRegex(CerebroError, message):
+                    check_proposal(Brain(self.root), self.workspace, proposal)
+
+    def test_agent_owned_cannot_replace_stronger_authority(self) -> None:
+        self._init_workspace_git()
+        init_task(self.workspace, "authority-boundary")
+        owner_proposal = self._proposal("owner-accepted")
+        apply_proposal(
+            Brain(self.root),
+            self.workspace,
+            owner_proposal,
+            input_fn=lambda _: "owner-accepted-fact",
+        )
+        agent_proposal = self._proposal("agent-owned")
+        payload = json.loads(agent_proposal.read_text())
+        payload["id"] = "owner-accepted-fact"
+        payload["target"] = "research/owner-accepted-fact.md"
+        agent_proposal.write_text(json.dumps(payload))
+        with self.assertRaisesRegex(
+            CerebroError,
+            "cannot replace stronger or legacy authority",
+        ):
+            apply_proposal(Brain(self.root), self.workspace, agent_proposal)
 
     def test_source_bound_proposal_requires_clean_task_provenance(self) -> None:
         self._init_workspace_git()
@@ -483,6 +575,8 @@ class PublicWorkflowAssetTests(unittest.TestCase):
         self.assertIn("credentials", combined)
         self.assertIn("--verify-evidence", combined)
         self.assertIn("source-bound", combined)
+        self.assertIn("agent-owned", combined)
+        self.assertIn("ordinary agent learning", combined)
         self.assertIn("owner-accepted", combined)
         self.assertIn("reject", combined)
         self.assertIn("automatic_promotion_eligible", combined)
