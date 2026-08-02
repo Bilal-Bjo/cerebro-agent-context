@@ -17,7 +17,8 @@ Task provenance must have been recorded before edits with:
 cerebro task init --cwd <project-checkout> --id <short-task-id> --json
 
 If that did not happen, do not invent a base commit. Source-bound automatic promotion is
-unavailable; route the candidate to owner review.
+unavailable. Bounded agent-owned learning is also unavailable until the next clean task boundary;
+do not route ordinary agent learning to owner confirmation as a fallback.
 
 Apply this strict durable-value gate. Update Cerebro only if the result is likely to change a
 future agent's action and it records one of:
@@ -36,34 +37,42 @@ Classify every candidate:
 
 - source-bound candidate: a derived fact independently proven by small owning files the agent did
   not create or change since the recorded task base;
-- owner-accepted candidate: a durable decision or claim that requires the owner to type the exact
-  note ID interactively;
+- agent-owned candidate: a bounded internal runbook, agent-process incident, or research synthesis
+  that should change future agent behavior without claiming external proof or owner approval;
+- owner-accepted candidate: only a claim that explicitly represents the owner's approved
+  preference, commitment, or consequential business decision;
 - reject: inference, duplicate source facts, temporary state, or task exhaust.
 
-Inference never becomes current authority. Do not edit note frontmatter directly to grant
-authority. For a surviving candidate, write one JSON file with exactly this shape:
+Ordinary agent learning must not require the owner to babysit Cerebro. Prefer `agent-owned` for
+corrections and prevention rules discovered through the agent's work. It is limited to internal
+notes directly under `runbooks/`, `incidents/`, or `research/`; requires `agent-learning` and
+`audit://agent/...` provenance; and cannot supersede notes, declare evidence, or replace stronger
+authority. Inference never becomes current authority. Do not edit note frontmatter directly to
+grant authority. For a surviving candidate, write one JSON file with exactly this shape:
 
 {
   "schema_version": 1,
   "id": "stable-note-id",
   "project": "resolved-project-id",
-  "type": "state",
-  "target": "State.md",
+  "type": "runbook",
+  "target": "runbooks/Prevention Rule.md",
   "sensitivity": "internal",
-  "sources": ["repo://project/path"],
-  "tags": ["bounded", "terms"],
+  "sources": ["audit://agent/project-task"],
+  "tags": ["agent-learning", "bounded"],
   "supersedes": [],
   "summary": "One compact claim.",
   "read_when": "When this claim changes a future action.",
   "title": "Human title",
   "body": "Compact Markdown body.",
-  "requested_authority": "source-bound",
-  "evidence_paths": ["path/that-directly-supports-the-claim"]
+  "requested_authority": "agent-owned",
+  "evidence_paths": []
 }
 
 Allowed targets are State.md, Agent Map.md, or a Markdown file under decisions/, runbooks/,
-incidents/, or research/. Use requested_authority owner-accepted with an empty evidence_paths list
-for an owner decision.
+incidents/, or research/. For `agent-owned`, use internal sensitivity, a direct target in the
+partition matching its type, `agent-learning`, at least one `audit://agent/...` source, and empty
+`supersedes` and `evidence_paths`. Use `owner-accepted` with an empty evidence list only for actual
+owner authority.
 
 Check it before applying:
 
@@ -73,9 +82,11 @@ cerebro proposal --brain <brain-path> check \
   --json
 
 For source-bound proposals, apply only when automatic_promotion_eligible is true. The CLI compares
-every evidence path with the recorded base and creates the hashes itself. For owner-accepted
-proposals, ask the owner to run or explicitly approve the interactive apply; never simulate,
-pre-fill, pipe, or bypass the exact-ID confirmation.
+every evidence path with the recorded base and creates the hashes itself. Apply bounded
+agent-owned proposals automatically when automatic_promotion_eligible is true; never ask the owner
+to type an ID for the agent's own learning. For owner-accepted proposals, ask the owner to run or
+explicitly approve the interactive apply; never simulate, pre-fill, pipe, or bypass the exact-ID
+confirmation.
 
 Apply an eligible proposal:
 

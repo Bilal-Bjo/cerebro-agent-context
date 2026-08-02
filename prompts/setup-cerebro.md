@@ -152,8 +152,10 @@ exact proposal JSON per note using the schema in the public reconciliation promp
 `cerebro proposal ... check`, then apply it with `cerebro proposal ... apply`.
 
 Request `source-bound` authority only when task initialization succeeded and every evidence file
-was untouched since that base. Otherwise request `owner-accepted` and stop for the owner's exact-ID
-interactive confirmation.
+was untouched since that base. Use `agent-owned` for bounded internal runbooks, agent-process
+incidents, and research that should change future agent behavior without claiming owner approval.
+Reserve `owner-accepted` and the exact-ID interactive confirmation for statements that explicitly
+represent the owner's preference, commitment, or consequential business decision.
 
 The State proposal should contain compact present-tense authority covering:
 
@@ -206,7 +208,9 @@ Before planning or editing:
 6. Never store credentials, cookies, sessions, private keys, customer data, or raw transcripts in
    Cerebro.
 7. After nontrivial work, use the reconciliation prompt or skill to submit a structured proposal.
-   Never grant authority by editing note frontmatter directly.
+   Ordinary agent learning uses bounded `agent-owned` authority without owner confirmation;
+   `owner-accepted` is only for actual owner decisions. Never grant authority by editing
+   frontmatter directly.
 8. Prefer correcting an existing note. Never create task logs, copy source code, or remember
    temporary plans merely because work occurred.
 

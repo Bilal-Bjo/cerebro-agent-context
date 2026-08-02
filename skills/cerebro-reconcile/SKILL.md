@@ -16,8 +16,9 @@ Keep Cerebro useful by remembering only compact, reusable project truth.
    cerebro task init --cwd <project-checkout> --id <short-task-id> --json
    ```
 
-   If it was not, do not invent a base. Source-bound automatic promotion is unavailable and the
-   candidate requires owner review.
+   If it was not, do not invent a base. Source-bound and agent-owned automatic promotion are
+   unavailable until the next clean task boundary; ordinary agent learning does not become
+   owner-accepted merely because task provenance is missing.
 3. Resolve and read current authority from the actual project checkout:
 
    ```text
@@ -42,13 +43,19 @@ Keep Cerebro useful by remembering only compact, reusable project truth.
 
    - `source-bound`: a derived fact independently proven by small owning files the agent did not
      change since the recorded task base;
-   - `owner-accepted`: a durable decision or claim that requires exact interactive owner
-     confirmation;
+   - `agent-owned`: a bounded internal runbook, agent-process incident, or research synthesis that
+     should change future agent behavior without claiming external proof or owner approval;
+   - `owner-accepted`: only a claim that explicitly represents the owner's approved preference,
+     commitment, or consequential business decision;
    - `reject`: inference, duplicate source facts, temporary state, or task exhaust that should not
      become current authority.
 
-   Inference never becomes current authority. Never grant authority by editing frontmatter
-   directly.
+   Ordinary agent learning must not require the owner to babysit Cerebro. Use `agent-owned` for
+   corrections and prevention rules discovered through the agent's own work. It is bounded to
+   internal runbook, incident, and research notes; it requires `agent-learning` and
+   `audit://agent/...` provenance; and it cannot supersede notes, declare executable evidence, or
+   replace stronger authority. Inference never becomes current authority. Never grant authority
+   by editing frontmatter directly.
 6. Prefer correcting the existing note that owns the subject. Otherwise choose the narrowest
    appropriate type: State, decision, runbook, incident, or research. Do not create a task log.
 7. Write one exact structured proposal using the schema in
@@ -61,9 +68,11 @@ Keep Cerebro useful by remembering only compact, reusable project truth.
      --json
    ```
 
-   Apply a source-bound proposal only when `automatic_promotion_eligible` is true. For
-   owner-accepted authority, require the owner to type the exact note ID; never simulate, pre-fill,
-   pipe, or bypass confirmation. Apply with `cerebro proposal --brain <brain-path> apply ...`.
+   Apply source-bound and bounded agent-owned proposals only when
+   `automatic_promotion_eligible` is true. Agent-owned application is automatic; never ask the
+   owner to type an ID for the agent's own learning. For owner-accepted authority, require the
+   owner to type the exact note ID; never simulate, pre-fill, pipe, or bypass confirmation. Apply
+   with `cerebro proposal --brain <brain-path> apply ...`.
 8. Inspect the brain's Git status before applying. Preserve unrelated changes. Run
    `cerebro validate --json`, inspect the exact diff, and commit only the intended note paths when
    the brain already has a safe local Git workflow.

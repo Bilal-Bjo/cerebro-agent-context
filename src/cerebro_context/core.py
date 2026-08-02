@@ -10,7 +10,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 SENSITIVITIES = {"public", "internal", "restricted"}
@@ -35,7 +35,13 @@ NONCURRENT_STATUSES = {
     "historical",
     "proposed",
 }
-AUTHORITIES = {"owner-accepted", "source-bound", "proposal"}
+AUTHORITIES = {"agent-owned", "owner-accepted", "source-bound", "proposal"}
+AGENT_OWNED_TYPES = {"runbook", "incident", "research"}
+AGENT_OWNED_TARGET_PREFIXES = {
+    "runbook": "runbooks",
+    "incident": "incidents",
+    "research": "research",
+}
 REQUIRED_NOTE_FIELDS = {
     "schema_version",
     "id",
@@ -310,11 +316,48 @@ def validate_authority(note: Note) -> list[Issue]:
         return [
             Issue(
                 str(note.path),
-                "authority must be owner-accepted, source-bound, or proposal",
+                "authority must be agent-owned, owner-accepted, source-bound, or proposal",
             )
         ]
     if authority == "source-bound" and not note.metadata.get("verification"):
         return [Issue(str(note.path), "source-bound authority requires verification")]
+    if authority == "agent-owned":
+        if note.note_type not in AGENT_OWNED_TYPES:
+            return [
+                Issue(
+                    str(note.path),
+                    "agent-owned authority is limited to runbook, incident, or research notes",
+                )
+            ]
+        if note.sensitivity != "internal":
+            return [Issue(str(note.path), "agent-owned authority must be internal")]
+        if "agent-learning" not in note.metadata.get("tags", []):
+            return [Issue(str(note.path), "agent-owned authority requires agent-learning tag")]
+        if note.metadata.get("supersedes"):
+            return [Issue(str(note.path), "agent-owned authority cannot supersede notes")]
+        if "verification" in note.metadata:
+            return [Issue(str(note.path), "agent-owned authority cannot declare verification")]
+        if not any(
+            isinstance(source, str) and source.startswith("audit://agent/")
+            for source in note.metadata.get("sources", [])
+        ):
+            return [
+                Issue(
+                    str(note.path),
+                    "agent-owned authority requires audit://agent provenance",
+                )
+            ]
+        expected_parent = AGENT_OWNED_TARGET_PREFIXES[note.note_type]
+        if (
+            note.path.parent.name != expected_parent
+            or note.path.parent.parent.name != note.project
+        ):
+            return [
+                Issue(
+                    str(note.path),
+                    f"agent-owned {note.note_type} notes must be directly under {expected_parent}/",
+                )
+            ]
     if authority == "proposal" and note.status in CURRENT_STATUSES.get(
         note.note_type, set()
     ):
@@ -325,11 +368,11 @@ def validate_authority(note: Note) -> list[Issue]:
         return []
     if not isinstance(promotion, dict):
         return [Issue(str(note.path), f"{authority} authority requires promotion metadata")]
-    expected_method = (
-        "interactive-owner-confirmation"
-        if authority == "owner-accepted"
-        else "task-provenance"
-    )
+    expected_method = {
+        "agent-owned": "agent-reconciliation",
+        "owner-accepted": "interactive-owner-confirmation",
+        "source-bound": "task-provenance",
+    }[authority]
     if promotion.get("method") != expected_method:
         return [
             Issue(
@@ -345,12 +388,12 @@ def validate_authority(note: Note) -> list[Issue]:
     except ValueError:
         return [Issue(str(note.path), "promotion.accepted_at must be an ISO timestamp")]
 
-    if authority == "source-bound":
+    if authority in {"agent-owned", "source-bound"}:
         if set(promotion) != {"method", "accepted_at", "task_id", "base_commit"}:
             return [
                 Issue(
                     str(note.path),
-                    "source-bound promotion must contain exactly method, accepted_at, "
+                    f"{authority} promotion must contain exactly method, accepted_at, "
                     "task_id, and base_commit",
                 )
             ]
@@ -360,7 +403,7 @@ def validate_authority(note: Note) -> list[Issue]:
             or not isinstance(promotion.get("base_commit"), str)
             or not re.fullmatch(r"[0-9a-f]{40}", promotion["base_commit"])
         ):
-            return [Issue(str(note.path), "source-bound promotion metadata is invalid")]
+            return [Issue(str(note.path), f"{authority} promotion metadata is invalid")]
     elif set(promotion) != {"method", "accepted_at"}:
         return [
             Issue(

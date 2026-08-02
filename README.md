@@ -32,11 +32,12 @@ personal soak must prove that.
 [evaluation harness](evaluation/README.md). Its frozen v1 scenarios deliberately include cases
 Cerebro handles well and cases where it fails.
 
-**What changed in v0.3?** In the governed write path, a note cannot become trusted merely by
-declaring itself current. New notes state whether they were explicitly accepted by the owner,
-independently bound to untouched source, or remain a proposal. Cerebro records the task's Git base,
-refuses automatic promotion from evidence the agent changed during that task, warns on age, blocks
-on broken evidence, and includes a private 14-day workflow-soak recorder.
+**What changed in v0.3.1?** Agents can now retain their own bounded operational lessons without
+asking the owner to babysit every memory write. `agent-owned` authority is automatic but limited to
+internal runbooks, agent-process incidents, and research with audit provenance. It cannot
+supersede notes, claim executable evidence, or impersonate an owner decision. Source facts still
+require untouched evidence; claims that the owner approved a commitment still require exact
+interactive confirmation.
 
 Coding agents can remember things. The harder problem is deciding what they are still allowed to
 trust.
@@ -115,9 +116,10 @@ Cerebro v0.3 provides:
 - stale and non-current exclusion by default;
 - warning-first age handling with opt-in fail-closed `--require-fresh` retrieval;
 - optional project-file SHA-256 evidence with fail-closed `--verify-evidence` retrieval;
-- code-enforced `owner-accepted`, `source-bound`, and `proposal` authority;
+- code-enforced `agent-owned`, `owner-accepted`, `source-bound`, and `proposal` authority;
 - task-base Git provenance that prevents self-authored evidence from being auto-promoted;
-- structured, atomic proposal application with exact owner confirmation;
+- structured, atomic proposal application with autonomous bounded agent learning and exact owner
+  confirmation only for actual owner authority;
 - a private, preregistered workflow-soak recorder that stores metrics rather than transcripts;
 - explicit, labelled historical retrieval;
 - restricted project and note gates;
@@ -280,14 +282,14 @@ id: checkout-recovery-runbook
 project: northstar-shop
 type: runbook
 status: active
-authority: owner-accepted
-promotion: {"accepted_at":"2026-01-15T10:00:00+00:00","method":"interactive-owner-confirmation"}
+authority: agent-owned
+promotion: {"accepted_at":"2026-01-15T10:00:00+00:00","base_commit":"0123456789abcdef0123456789abcdef01234567","method":"agent-reconciliation","task_id":"checkout-recovery"}
 created: 2026-01-15
 updated: 2026-01-15
 last_verified: 2026-01-15
 sensitivity: internal
-sources: ["run://northstar-shop/recovery-drill-2026-01"]
-tags: ["checkout", "recovery"]
+sources: ["audit://agent/checkout-recovery"]
+tags: ["checkout", "recovery", "agent-learning"]
 supersedes: []
 summary: "Recovery procedure for orders left in a pending state."
 read_when: "Read before recovering a pending checkout."
@@ -327,6 +329,7 @@ Note type says what a note is. Authority says why an agent may trust it:
 
 | Authority | Meaning | Promotion rule |
 |---|---|---|
+| `agent-owned` | A bounded internal lesson the agent may use in future work | Automatic only for runbooks, agent-process incidents, and research with task and audit provenance |
 | `owner-accepted` | A durable choice or claim the owner explicitly accepted | The CLI requires typing the exact note ID interactively |
 | `source-bound` | A claim bound to repository evidence independent of this task | Every evidence path must be untouched since the recorded task base |
 | `proposal` | A candidate that has not earned authority | Never returned as current authority |
@@ -334,6 +337,12 @@ Note type says what a note is. Authority says why an agent may trust it:
 Schema v1 notes remain readable for migration and are labelled `legacy-declared`. New notes use
 schema v2. A fresh date or valid hash is not enough by itself: the promotion record must also
 explain how authority was earned.
+
+`agent-owned` is deliberately narrow. The note must be internal, live directly under `runbooks/`,
+`incidents/`, or `research/`, include the `agent-learning` tag and an `audit://agent/...` source,
+declare no file evidence, supersede nothing, and start from a recorded task base. It cannot create
+State, Agent Map, decision, or reference authority, and it cannot overwrite a stronger or legacy
+note.
 
 ### Freshness
 
@@ -527,9 +536,10 @@ cerebro proposal --brain ~/.cerebro apply \
 ```
 
 A `source-bound` proposal is applied automatically only when all evidence paths were untouched
-since `cerebro task init`. An `owner-accepted` proposal always requires interactive confirmation by
-typing the exact note ID. Application is atomic, validates the complete brain, and reports the
-intended Git commit message. Cerebro does not commit or push.
+since `cerebro task init`. A bounded `agent-owned` proposal is also automatic and never prompts the
+owner. An `owner-accepted` proposal always requires interactive confirmation by typing the exact
+note ID because it explicitly claims owner authority. Application is atomic, validates the
+complete brain, and reports the intended Git commit message. Cerebro does not commit or push.
 
 See [the reconciliation prompt](prompts/reconcile-cerebro.md) for the proposal schema.
 
@@ -593,7 +603,9 @@ Before planning or editing:
    runtime output as more authoritative than Cerebro.
 6. Never store credentials, sessions, cookies, private keys, or raw transcripts in Cerebro.
 7. After nontrivial work, use the `cerebro-reconcile` skill or reconciliation prompt. Submit a
-   structured proposal; never grant authority by editing frontmatter directly.
+   structured proposal. Use `agent-owned` for ordinary operational learning and reserve
+   `owner-accepted` for actual owner decisions; never grant authority by editing frontmatter
+   directly.
 8. During a registered soak, record one event and leave uncertain owner ratings `unrated`.
 ```
 
@@ -636,7 +648,10 @@ brain.
 5. **Block on broken evidence, warn on age by default.** Stale notes stay out of context; use
    strict freshness only when age alone must stop the task.
 6. **Keep the brain small.** Store durable operational knowledge, not transcripts or task exhaust.
-7. **Vendor neutrality matters.** The same verified context should work across agent runtimes.
+7. **Agents own their lessons, not the owner.** Reusable agent-process corrections publish
+   autonomously inside a narrow authority class; representing the owner's decisions remains a
+   separate human gate.
+8. **Vendor neutrality matters.** The same verified context should work across agent runtimes.
 
 See [Architecture](docs/architecture.md) for the retrieval and trust model.
 

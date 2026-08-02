@@ -4,6 +4,9 @@ All notable changes to Cerebro will be documented here.
 
 ## Unreleased
 
+- Add bounded `agent-owned` authority so internal operational lessons can promote automatically
+  without owner confirmation, while preventing them from declaring evidence, superseding notes,
+  replacing stronger authority, or impersonating owner decisions.
 - Add schema v2 authority classes: `owner-accepted`, `source-bound`, and non-authoritative
   `proposal`, while keeping schema v1 readable as labelled legacy authority.
 - Add clean task-base Git provenance and refuse source-bound automatic promotion when an evidence

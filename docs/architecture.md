@@ -61,7 +61,8 @@ A note is current authority only when:
 
 - its type is supported;
 - its status is current for that type;
-- schema v2 records `owner-accepted` or `source-bound` authority rather than `proposal`;
+- schema v2 records `agent-owned`, `owner-accepted`, or `source-bound` authority rather than
+  `proposal`;
 - its promotion metadata satisfies the selected authority class;
 - its freshness window has not expired;
 - its `expires_at` date, when present, has not passed;
@@ -92,6 +93,8 @@ candidate proposal
         ↓
 source-bound ── compare evidence paths with task diff
         │
+        ├────── agent-owned ── enforce bounded internal learning policy
+        │
         └────── owner-accepted ── exact interactive confirmation
         ↓
 atomic note write + whole-brain validation
@@ -101,8 +104,15 @@ For `source-bound`, task provenance covers committed changes since the base, sta
 unstaged changes, and untracked files. If any evidence path appears in that union, automatic
 promotion refuses. Missing task metadata and dirty preflight states route to review.
 
-`owner-accepted` is a different trust mechanism, not a fallback an agent may silently choose. The
-CLI requires the owner to type the exact note ID. `proposal` never appears in current context.
+`agent-owned` is an automatic but intentionally smaller trust class. It is limited to internal
+runbooks, agent-process incidents, and research with task and agent-audit provenance. It cannot
+declare file evidence, supersede notes, create State/decision/reference authority, or replace
+stronger authority.
+
+`owner-accepted` is a different trust mechanism, not a fallback an agent may silently choose. It is
+reserved for claims that represent the owner's preference, commitment, or consequential business
+decision, and the CLI requires the owner to type the exact note ID. `proposal` never appears in
+current context.
 
 Cerebro reports an intended commit message but does not commit, push, configure remotes, or publish.
 
